@@ -108,6 +108,8 @@ model_config.block_size = 384
 model_config.bottleneck = "variational" # "simple" or "variational" or "none"
 
 # Set the model config.
+config.wandb_log = True
+config.wandb_project = "bottleneck-transformers"
 config.wandb_run_name = f"transformer_{model_config.bottleneck}_{time.time()}"
 
 # Save both configs to disk. Map to dict first.
