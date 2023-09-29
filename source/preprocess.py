@@ -23,9 +23,11 @@ def peprocess(
     dataset_id="TristanBehrens/js-fakes-4bars",
     output_path="data/jsfakes4bars",
     padding_length=384,
+    mode="generation" # "modeling"
     ):
 
     # Create the output path.
+    output_path = os.path.join(output_path, mode)
     os.makedirs(output_path, exist_ok=True)
 
     # Open the overview file.
@@ -53,9 +55,16 @@ def peprocess(
         for row in tqdm(split_dataset[split]):
             vocabulary_counter.update(row["text"].split(" "))
     vocabulary = [word for word, _ in vocabulary_counter.most_common()]
+    vocabulary = sorted(vocabulary)
 
     # We need to add the special tokens.
     vocabulary = ["[UNK]", "PAD", "SOS", "EOS"] + vocabulary
+
+    # Save the vocabulary.
+    vocabulary_file_path = os.path.join(output_path, "vocabulary.txt")
+    with open(vocabulary_file_path, "w") as vocabulary_file:
+        for token in vocabulary:
+            vocabulary_file.write(f"{token}\n")
 
     # Print some information.
     print(f"Vocabulary size: {len(vocabulary)}", file=overview_file)
@@ -85,11 +94,15 @@ def peprocess(
         text_ids = encode_text(example["text"])
         assert encode_token("[UNK]") not in text_ids
 
-
         # Create the ids.
-        encoder_ids = text_ids
-        decoder_ids = [encode_token("[SOS]")] + text_ids
-        target_ids = text_ids + [encode_token("[EOS]")]
+        if mode == "modeling":
+            encoder_ids = text_ids
+            decoder_ids = [encode_token("[SOS]")] + text_ids
+            target_ids = text_ids + [encode_token("[EOS]")]
+        elif mode == "generation":
+            encoder_ids = text_ids
+            decoder_ids = text_ids
+            target_ids = text_ids[1:] + [encode_token("[EOS]")]
 
         # Raise an exception if any of the sequences is longer than the padding length.
         if len(encoder_ids) > padding_length:
@@ -122,7 +135,9 @@ def peprocess(
 
     # Print a sample.
     print("Sample:", file=overview_file)
-    print(tokenized["train"][0], file=overview_file)
+    print(f"encoder_ids: {tokenized['train'][0]['encoder_ids']}", file=overview_file)
+    print(f"decoder_ids: {tokenized['train'][0]['decoder_ids']}", file=overview_file)
+    print(f"target_ids:  {tokenized['train'][0]['target_ids']}", file=overview_file)
 
     # Create a histogram of the lengths.
     lengths = [row["length"] for row in tokenized["train"]]
