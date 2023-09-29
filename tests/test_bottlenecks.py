@@ -2,11 +2,12 @@ import torch
 import numpy as np
 import sys
 sys.path.append(".")
-from source.bottlenecks import SimpleBottleneck
+from source.bottlenecks import SimpleBottleneck, VariationalBottleneck
 
 def main():
 
-    test_simple_bottleneck()
+    #test_simple_bottleneck()
+    test_variational_bottleneck()
 
 def test_simple_bottleneck():
 
@@ -27,12 +28,44 @@ def test_simple_bottleneck():
 
     # Decode the sample.
     y = bottleneck.decode(z)
-    print(f"y.shape: {y.shape}")
-    print(f"  {np.prod(y.shape)} numbers")
+    print(f"y.shape: {y.shape} ({np.prod(y.shape)} numbers)")
 
     # Assert the shapes are the same.
     assert y.shape == x.shape
 
+
+def test_variational_bottleneck():
+
+    # Create the bottleneck.
+    block_size = 384
+    n_embd = 128
+    depth = 5
+    bottleneck = VariationalBottleneck(block_size, n_embd, depth)
+    print(f"bottleneck: {bottleneck}")
+    print("")
+    
+    # Create a random sample.
+    x = torch.rand(1, block_size, n_embd)
+    print(f"x.shape: {x.shape} ({np.prod(x.shape)} numbers)")
+    print("")
+    
+    # Encode the sample.
+    mu, logvar = bottleneck.encode(x)
+    print(f"mu.shape: {mu.shape} ({np.prod(mu.shape)} numbers)")
+    print(f"logvar.shape: {logvar.shape} ({np.prod(logvar.shape)} numbers)")
+    print("")
+
+    z = bottleneck.reparameterize(mu, logvar)
+    print(f"z.shape: {z.shape} ({np.prod(z.shape)} numbers)")
+    print("")
+
+    # Decode the sample.
+    y = bottleneck.decode(z)
+    print(f"y.shape: {y.shape} ({np.prod(y.shape)} numbers)")
+    print("")
+
+    # Assert the shapes are the same.
+    assert y.shape == x.shape
 
 if __name__ == '__main__':
     main()

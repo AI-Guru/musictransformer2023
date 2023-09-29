@@ -115,6 +115,7 @@ model_config.dropout = 0.0
 model_config.bias = False
 model_config.block_size = 384
 model_config.bottleneck = "variational" # "simple" or "variational" or "none"
+model_config.bottleneck_depth = 2
 
 # Set the output directory.
 config.out_dir = os.path.join(config.out_dir, f"transformer_{model_config.bottleneck}_{timestamp}")
@@ -305,6 +306,11 @@ elif init_from.startswith('gpt2'):
 #    model.crop_block_size(block_size)
 #    model_args['block_size'] = block_size # so that the checkpoint will have the right value
 model.to(config.device)
+
+# Prints the bottleneck shape.
+bottleneck_shape = model.get_bottleneck_shape()
+print(f"bottleneck shape: {bottleneck_shape} {np.prod(bottleneck_shape):,}")
+del bottleneck_shape
 
 # Prit a warning if the device is cpu.
 if config.device == "cpu":

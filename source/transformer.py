@@ -29,6 +29,7 @@ class TransformerConfig:
     bias: bool = True # True: bias in Linears and LayerNorms, like GPT-2. False: a bit better and faster
     bottleneck: str = "none"
     bottleneck_loss_coef: float = 100.0
+    bottleneck_depth: int = 4
 
 class Transformer(nn.Module):
 
@@ -63,7 +64,7 @@ class Transformer(nn.Module):
         elif config.bottleneck == "simple":
             self.bottleneck = SimpleBottleneck(config.block_size, config.n_embd)
         elif config.bottleneck == "variational":
-            self.bottleneck = VariationalBottleneck(config.block_size, config.n_embd)
+            self.bottleneck = VariationalBottleneck(config.block_size, config.n_embd, config.bottleneck_depth)
         else: 
             raise NotImplementedError(f"Bottleneck {config.bottleneck} not implemented yet.")
 
