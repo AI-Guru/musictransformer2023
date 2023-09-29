@@ -40,6 +40,10 @@ from dataclasses import dataclass, asdict
 
 @dataclass
 class TrainingConfig:
+
+    # Dataset.
+    dataset_path = "data/jsfakes4bars/generation"
+
     # I/O
     out_dir: str = "out"
     eval_interval: int = 200
@@ -173,9 +177,9 @@ ctx = nullcontext() if device_type == 'cpu' else torch.amp.autocast(device_type=
 # Load the dataset from disk.
 # The dataset is already tokenized and split into train and val.
 # There are two files in the dataset: train.jsonl and val.jsonl.
-dataset_path = "data/jsfakes4bars"
-train_dataset_path = os.path.join(dataset_path, "train.jsonl")
-validate_dataset_path = os.path.join(dataset_path, "val.jsonl")
+assert os.path.exists(config.dataset_path), f"Error: {config.dataset_path} does not exist."
+train_dataset_path = os.path.join(config.dataset_path, "train.jsonl")
+validate_dataset_path = os.path.join(config.dataset_path, "val.jsonl")
 assert os.path.exists(train_dataset_path), f"Error: {train_dataset_path} does not exist."
 assert os.path.exists(validate_dataset_path), f"Error: {validate_dataset_path} does not exist."
 dataset_train = load_dataset("json", data_files=train_dataset_path, split="train")
