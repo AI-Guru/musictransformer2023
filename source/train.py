@@ -105,7 +105,7 @@ model_config.n_embd = 128
 model_config.dropout = 0.0
 model_config.bias = False
 model_config.block_size = 384
-model_config.bottleneck = "simple"
+model_config.bottleneck = "variational" # "simple" or "variational" or "none"
 
 # Set the model config.
 config.wandb_run_name = f"transformer_{model_config.bottleneck}_{time.time()}"

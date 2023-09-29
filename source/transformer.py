@@ -13,6 +13,7 @@ from layers import (
 )
 from bottlenecks import (
     SimpleBottleneck,
+    VariationalBottleneck,
 )
 
 @dataclass
@@ -58,6 +59,8 @@ class Transformer(nn.Module):
             self.bottleneck = None
         elif config.bottleneck == "simple":
             self.bottleneck = SimpleBottleneck(config.block_size, config.n_embd)
+        elif config.bottleneck == "variational":
+            self.bottleneck = VariationalBottleneck(config.block_size, config.n_embd)
         else: 
             raise NotImplementedError(f"Bottleneck {config.bottleneck} not implemented yet.")
 
@@ -118,10 +121,9 @@ class Transformer(nn.Module):
         x_encoder = self.encoder.ln_f(x_encoder)
         
         # Forward the bottleneck if it exists.
+        bottleneck_loss = 0.0
         if self.bottleneck is not None:
-            x_encoder = self.bottleneck(x_encoder)
-
-        # TODO Put the bottleneck here.
+            x_encoder, bottleneck_loss = self.bottleneck(x_encoder, return_loss=True)
 
         # Forward the decoder.
         tok_emb_decoder = self.decoder.wte(decoder_ids) # token embeddings of shape (b, t, n_embd)
@@ -134,7 +136,7 @@ class Transformer(nn.Module):
         if target_ids is not None:
             # if we are given some desired targets also calculate the loss
             logits = self.lm_head(x_decoder)
-            loss = F.cross_entropy(logits.view(-1, logits.size(-1)), target_ids.view(-1), ignore_index=-1)
+            loss = F.cross_entropy(logits.view(-1, logits.size(-1)), target_ids.view(-1), ignore_index=-1) + bottleneck_loss
         else:
             # inference-time mini-optimization: only forward the lm_head on the very last position
             logits = self.lm_head(x_decoder[:, [-1], :]) # note: using list [-1] to preserve the time dim
