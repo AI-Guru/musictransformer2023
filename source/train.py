@@ -35,6 +35,7 @@ sys.path.append(".")
 
 #from model import GPTConfig, GPT
 from source.transformer import TransformerConfig, Transformer
+from source.tokenizer import Tokenizer
 
 from dataclasses import dataclass, asdict
 
@@ -186,6 +187,11 @@ dataset_train = load_dataset("json", data_files=train_dataset_path, split="train
 dataset_validate = load_dataset("json", data_files=validate_dataset_path, split="train")
 print(dataset_train)
 print(dataset_validate)
+
+# Create and save the tokenizer.
+tokenizer = Tokenizer.from_vocabulary_file(os.path.join(config.dataset_path, "vocabulary.txt"))
+tokenizer.save(os.path.join(config.out_dir, "tokenizer.json"))
+del tokenizer
 
 def get_batch(split):
     if split == "train":

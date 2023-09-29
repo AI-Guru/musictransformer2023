@@ -1,6 +1,8 @@
 import math
 import inspect
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
+import os
+import json
 
 import torch
 import torch.nn as nn
@@ -26,6 +28,7 @@ class TransformerConfig:
     dropout: float = 0.0
     bias: bool = True # True: bias in Linears and LayerNorms, like GPT-2. False: a bit better and faster
     bottleneck: str = "none"
+    bottleneck_loss_coef: float = 100.0
 
 class Transformer(nn.Module):
 
@@ -123,7 +126,8 @@ class Transformer(nn.Module):
         # Forward the bottleneck if it exists.
         bottleneck_loss = 0.0
         if self.bottleneck is not None:
-            x_encoder, bottleneck_loss = self.bottleneck(x_encoder, return_loss=True)
+            x_encoder, bottleneck_loss = self.bottleneck(x_encoder, return_loss=True) 
+            bottleneck_loss = bottleneck_loss * self.config.bottleneck_loss_coef
 
         # Forward the decoder.
         tok_emb_decoder = self.decoder.wte(decoder_ids) # token embeddings of shape (b, t, n_embd)
@@ -144,6 +148,36 @@ class Transformer(nn.Module):
             logits = self.lm_head(x_decoder[:, [-1], :]) # note: using list [-1] to preserve the time dim
             loss = None
             return logits
+
+
+    def forward_encoder(self, x_encoder, decoder_ids):
+        # Assume that we already have the embedding of the encoder. 
+        # Only forward the decoder.
+
+        b, t = decoder_ids.size()
+        device = decoder_ids.device
+        pos = torch.arange(0, t, dtype=torch.long, device=device) # shape (t)
+
+        # Forward the decoder.
+        tok_emb_decoder = self.decoder.wte(decoder_ids) # token embeddings of shape (b, t, n_embd)
+        pos_emb_decoder = self.decoder.wpe(pos) # position embeddings of shape (t, n_embd)
+
+        x_decoder = tok_emb_decoder + pos_emb_decoder
+
+        # Ensure that x_decoder has the same shape as encoder_x. Encoder x is longer. Truncate it.
+        #if x_decoder.shape[1] < x_encoder.shape[1]:
+        #    x_encoder = x_encoder[:, :x_decoder.shape[1], :]
+
+        x_decoder = self.decoder.drop(x_decoder)
+        for decoder_block in self.decoder.h:
+            x_decoder = decoder_block(x_decoder, x_encoder)
+
+        x_decoder = self.decoder.ln_f(x_decoder)
+
+        # Get the logits.
+        logits = self.lm_head(x_decoder[:, [-1], :])
+        return logits
+
 
     def crop_block_size(self, block_size):
         # model surgery to decrease the block size if necessary
@@ -255,18 +289,37 @@ class Transformer(nn.Module):
         mfu = flops_achieved / flops_promised
         return mfu
 
+
     @torch.no_grad()
-    def generate(self, idx, max_new_tokens, temperature=1.0, top_k=None):
+    def generate(self, idx, max_new_tokens, bottleneck_condition, temperature=1.0, top_k=None):
         """
         Take a conditioning sequence of indices idx (LongTensor of shape (b,t)) and complete
         the sequence max_new_tokens times, feeding the predictions back into the model each time.
         Most likely you'll want to make sure to be in model.eval() mode of operation for this.
         """
+
+        # Ensure that idx is a tensor.
+        if not isinstance(idx, torch.LongTensor):
+            idx = torch.LongTensor(idx)
+
+        # Ensure that the first dimension is batch size.
+        if idx.dim() == 1:
+            idx = idx.unsqueeze(0)
+
+        # Use the bottleneck if it exists.
+        assert self.bottleneck is not None, "Cannot generate without a bottleneck."
+        encoder_x = self.bottleneck.decode(bottleneck_condition)
+
+        # Generate tokens.
         for _ in range(max_new_tokens):
+
             # if the sequence context is growing too long we must crop it at block_size
             idx_cond = idx if idx.size(1) <= self.config.block_size else idx[:, -self.config.block_size:]
+
             # forward the model to get the logits for the index in the sequence
-            logits, _ = self(idx_cond)
+            #logits, _ = self(idx_cond)
+            logits = self.forward_encoder(encoder_x, idx_cond)
+
             # pluck the logits at the final step and scale by desired temperature
             logits = logits[:, -1, :] / temperature
             # optionally crop the logits to only the top k options
@@ -275,9 +328,45 @@ class Transformer(nn.Module):
                 logits[logits < v[:, [-1]]] = -float('Inf')
             # apply softmax to convert logits to (normalized) probabilities
             probs = F.softmax(logits, dim=-1)
+            
             # sample from the distribution
             idx_next = torch.multinomial(probs, num_samples=1)
+
             # append sampled index to the running sequence and continue
             idx = torch.cat((idx, idx_next), dim=1)
 
         return idx
+
+
+    #@classmethod
+    def load(check_point_path):
+        if not os.path.exists(check_point_path):
+            raise Exception(f"Could not find checkpoint at {check_point_path}")
+        # Load the checkpoint.
+        checkpoint = torch.load(check_point_path, map_location="cpu")
+
+        # Print the keys of the checkpoint.
+        print("Checkpoint keys:")
+        for key in checkpoint.keys():
+            print(key)
+
+        # Load the config.
+        model_config_dict = checkpoint["model_config"]
+        model_config = TransformerConfig(**model_config_dict)
+
+        # Create the model.
+        model = Transformer(model_config)
+
+        # Load the state dict into the model.
+        model.load_state_dict(checkpoint["model"])
+
+        # Return the model.
+        return model
+    
+    def get_bottleneck_shape(self):
+        # Raise an exception if there is no bottleneck.
+        if self.bottleneck is None:
+            raise Exception("No bottleneck!")
+        
+        # Return the shape.
+        return self.bottleneck.get_shape()

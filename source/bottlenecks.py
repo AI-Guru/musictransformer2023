@@ -47,6 +47,9 @@ class SimpleBottleneck(nn.Module):
 class VariationalBottleneck(nn.Module):
     def __init__(self, block_size, n_embd):
         super(VariationalBottleneck, self).__init__()
+
+        self.block_size = block_size
+        self.n_embd = n_embd
         
         # Encoder layers
         self.encoder_layers = nn.Sequential(
@@ -98,3 +101,6 @@ class VariationalBottleneck(nn.Module):
         y = self.decoder_layers(z)
         y = y.transpose(1, 2)
         return y
+    
+    def get_shape(self):
+        return (self.n_embd // 8, self.block_size // 8)
