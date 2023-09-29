@@ -18,6 +18,7 @@ $ torchrun --nproc_per_node=8 --nnodes=2 --node_rank=1 --master_addr=123.456.123
 
 import os
 import time
+import datetime
 import math
 import pickle
 from contextlib import nullcontext
@@ -61,7 +62,7 @@ class TrainingConfig:
 
     # data
     gradient_accumulation_steps: int = 5 * 8  # Used to simulate larger batch sizes.
-    batch_size: int = 32  # If gradient_accumulation_steps > 1, this is the micro-batch size.
+    batch_size: int = 128  # If gradient_accumulation_steps > 1, this is the micro-batch size.
     #block_size: int = 384
 
     # adamw optimizer
@@ -85,6 +86,9 @@ class TrainingConfig:
     device: str = "cuda"  # Examples: 'cpu', 'cuda', 'cuda:0', 'cuda:1' etc., or try 'mps' on macbooks.
     dtype: str = "bfloat16" if ("torch" in locals() or "torch" in globals()) and torch.cuda.is_available() and torch.cuda.is_bf16_supported() else "float16"  # 'float32', 'bfloat16', or 'float16', the latter will auto implement a GradScaler.
     compile: bool = False  # Use PyTorch 2.0 to compile the model to be faster.
+
+# Get the timestamp as YYYYMMDD-HHMM.
+timestamp = datetime.datetime.now().strftime("%Y%m%d-%H%M")
 
 # Create the training config.
 config = TrainingConfig()
@@ -112,10 +116,16 @@ model_config.bias = False
 model_config.block_size = 384
 model_config.bottleneck = "variational" # "simple" or "variational" or "none"
 
+# Set the output directory.
+config.out_dir = os.path.join(config.out_dir, f"transformer_{model_config.bottleneck}_{timestamp}")
+
 # Set the model config.
 config.wandb_log = True
 config.wandb_project = "bottleneck-transformers"
-config.wandb_run_name = f"transformer_{model_config.bottleneck}_{time.time()}"
+config.wandb_run_name = f"transformer_{model_config.bottleneck}_{timestamp}"
+
+# Create the output directory.
+os.makedirs(config.out_dir, exist_ok=True)
 
 # Save both configs to disk. Map to dict first.
 training_config_path = os.path.join(config.out_dir, "training_config.json")
@@ -149,8 +159,7 @@ else:
 tokens_per_iter = config.gradient_accumulation_steps * ddp_world_size * config.batch_size * model_config.block_size
 print(f"tokens per iteration will be: {tokens_per_iter:,}")
 
-if master_process:
-    os.makedirs(config.out_dir, exist_ok=True)
+
 torch.manual_seed(1337 + seed_offset)
 torch.backends.cuda.matmul.allow_tf32 = True # allow tf32 on matmul
 torch.backends.cudnn.allow_tf32 = True # allow tf32 on cudnn
