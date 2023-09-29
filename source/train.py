@@ -60,7 +60,7 @@ class TrainingConfig:
 
     # data
     gradient_accumulation_steps: int = 5 * 8  # Used to simulate larger batch sizes.
-    batch_size: int = 12  # If gradient_accumulation_steps > 1, this is the micro-batch size.
+    batch_size: int = 32  # If gradient_accumulation_steps > 1, this is the micro-batch size.
     #block_size: int = 384
 
     # adamw optimizer
