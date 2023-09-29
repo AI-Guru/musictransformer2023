@@ -322,12 +322,18 @@ def estimate_loss():
     model.eval()
     for split in ['train', 'val']:
         losses = torch.zeros(config.eval_iters)
+        reconstruction_losses = torch.zeros(config.eval_iters)
+        bottleneck_losses = torch.zeros(config.eval_iters)
         for k in range(config.eval_iters):
             encoder_ids, decoder_ids, target_ids = get_batch(split)
             with ctx:
-                logits, loss = model(encoder_ids, decoder_ids, target_ids)
+                logits, loss, reconstruction_loss, bottleneck_loss = model(encoder_ids, decoder_ids, target_ids)
             losses[k] = loss.item()
+            reconstruction_losses[k] = reconstruction_loss.item()
+            bottleneck_losses[k] = bottleneck_loss.item()
         out[split] = losses.mean()
+        out[f"{split}_reconstruction"] = reconstruction_losses.mean()
+        out[f"{split}_bottleneck"] = bottleneck_losses.mean()
     model.train()
     return out
 
@@ -373,8 +379,12 @@ while True:
                 "iter": iter_num,
                 "train/loss": losses['train'],
                 "val/loss": losses['val'],
+                "train/reconstruction": losses['train_reconstruction'],
+                "val/reconstruction": losses['val_reconstruction'],
+                "train/bottleneck": losses['train_bottleneck'],
+                "val/bottleneck": losses['val_bottleneck'],
                 "lr": lr,
-                "mfu": running_mfu*100, # convert to percentage
+                "mfu": running_mfu * 100, # convert to percentage
             })
         if losses['val'] < best_val_loss or config.always_save_checkpoint:
             best_val_loss = losses['val']
@@ -402,7 +412,7 @@ while True:
             # looking at the source of that context manager, it just toggles this variable
             model.require_backward_grad_sync = (micro_step == config.gradient_accumulation_steps - 1)
         with ctx:
-            logits, loss = model(encoder_ids, decoder_ids, target_ids)
+            logits, loss, _, _ = model(encoder_ids, decoder_ids, target_ids)
             loss = loss / config.gradient_accumulation_steps # scale the loss to account for gradient accumulation
         # immediately async prefetch next batch while model is doing the forward pass on the GPU
         encoder_ids, decoder_ids, target_ids = get_batch('train')
