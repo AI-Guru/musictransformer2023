@@ -42,7 +42,7 @@ from dataclasses import dataclass, asdict
 class TrainingConfig:
     # I/O
     out_dir: str = "out"
-    eval_interval: int = 2000
+    eval_interval: int = 200
     log_interval: int = 1
     eval_iters: int = 200
     eval_only: bool = False  # If True, script exits right after the first eval.
@@ -105,6 +105,10 @@ model_config.n_embd = 128
 model_config.dropout = 0.0
 model_config.bias = False
 model_config.block_size = 384
+model_config.bottleneck = "simple"
+
+# Set the model config.
+config.wandb_run_name = f"transformer_{model_config.bottleneck}_{time.time()}"
 
 # Save both configs to disk. Map to dict first.
 training_config_path = os.path.join(config.out_dir, "training_config.json")
