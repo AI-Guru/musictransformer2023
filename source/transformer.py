@@ -292,7 +292,7 @@ class Transformer(nn.Module):
 
 
     @torch.no_grad()
-    def generate(self, idx, max_new_tokens, bottleneck_condition, temperature=1.0, top_k=None):
+    def generate(self, idx, max_new_tokens, bottleneck_condition, end_token_id=None, temperature=1.0, top_k=None):
         """
         Take a conditioning sequence of indices idx (LongTensor of shape (b,t)) and complete
         the sequence max_new_tokens times, feeding the predictions back into the model each time.
@@ -336,6 +336,10 @@ class Transformer(nn.Module):
             # append sampled index to the running sequence and continue
             idx = torch.cat((idx, idx_next), dim=1)
 
+            # If the latest token emitted is an <END> token, then we're done.
+            if end_token_id is not None and idx_next.squeeze().item() == end_token_id:
+                break
+
         return idx
 
 
@@ -347,9 +351,9 @@ class Transformer(nn.Module):
         checkpoint = torch.load(check_point_path, map_location="cpu")
 
         # Print the keys of the checkpoint.
-        print("Checkpoint keys:")
-        for key in checkpoint.keys():
-            print(key)
+        #print("Checkpoint keys:")
+        #for key in checkpoint.keys():
+        #    print(key)
 
         # Load the config.
         model_config_dict = checkpoint["model_config"]

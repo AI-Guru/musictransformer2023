@@ -54,8 +54,10 @@ class Tokenizer:
         index = self.vocabulary.index(token) if token in self.vocabulary else self.encode_token("[UNK]")
         return index
 
-    def decode_sequence(self, ids):
+    def decode_sequence(self, ids, join=False):
         sequence = [self.decode_token(id) for id in ids]
+        if join:
+            sequence = " ".join(sequence)
         return sequence
     
     def decode_token(self, id):

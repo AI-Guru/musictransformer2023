@@ -85,7 +85,7 @@ class TrainingConfig:
     # system
     device: str = "cuda"  # Examples: 'cpu', 'cuda', 'cuda:0', 'cuda:1' etc., or try 'mps' on macbooks.
     dtype: str = "bfloat16" if ("torch" in locals() or "torch" in globals()) and torch.cuda.is_available() and torch.cuda.is_bf16_supported() else "float16"  # 'float32', 'bfloat16', or 'float16', the latter will auto implement a GradScaler.
-    compile: bool = False  # Use PyTorch 2.0 to compile the model to be faster.
+    compile: bool = True  # Use PyTorch 2.0 to compile the model to be faster.
 
 # Get the timestamp as YYYYMMDD-HHMM.
 timestamp = datetime.datetime.now().strftime("%Y%m%d-%H%M")
