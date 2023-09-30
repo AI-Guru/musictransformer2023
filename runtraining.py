@@ -35,9 +35,9 @@ trainer_config.device = "auto"
 # Create the model config.
 model_config = TransformerConfig()
 model_config.vocab_size = 118
-model_config.n_layer = 2
-model_config.n_head = 2
-model_config.n_embd = 128
+model_config.n_layer = 8
+model_config.n_head = 8
+model_config.n_embd = 512
 model_config.dropout = 0.0
 model_config.bias = False
 model_config.block_size = 384
