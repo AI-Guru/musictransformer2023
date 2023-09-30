@@ -248,6 +248,8 @@ class Trainer:
                 do_step = True
             #do_step = False # TODO Remove this.
             if do_step:
+
+                # Unpack the batch.
                 encoder_ids_train, decoder_ids_train, target_ids_train = batch_train
 
                 # Get the learning rate.
@@ -293,6 +295,7 @@ class Trainer:
                 print(f"Validate at epoch {current_epoch} step {total_training_steps}...")
                 model.eval()
                 for encoder_ids_validate, decoder_ids_validate, target_ids_validate in dataset.iterate(split="validate", shuffle=False, batch_size=self.config.batch_size):
+                    # Forward pass and get the losses.
                     _, loss, reconstruction_loss, bottleneck_loss = model(encoder_ids_validate, decoder_ids_validate, target_ids_validate)
 
                     # Update epoch loss.
@@ -308,13 +311,21 @@ class Trainer:
             elif self.config.log_mode == "steps" and total_training_steps % self.config.log_every == 0:
                 do_log = True
             if do_log:
-                print(f"Log at epoch {current_epoch} step {total_training_steps}...")
+                losses_dict_mean = {k: np.mean(v) for k, v in losses_dict.items()}
+                losses_dict = create_losses_dict() 
+                
+                log_dict = { k: v for k, v in losses_dict_mean.items() }
+                log_dict["step"] = total_training_steps
+                log_dict["lr"] = lr
+                #log_dict["mfu"] = mfu
 
-                # Compute the mean of all losses.
-                losses_dict = {k: np.mean(v) for k, v in losses_dict.items()}
-                print(f"losses_dict: {losses_dict}")
-                losses_dict = create_losses_dict()
-                assert False, "More code"
+                # Log to terminal.
+                print(f"Log at epoch {current_epoch} step {total_training_steps}...")
+                print(" ".join([f"{k}: {v:.4f}" for k, v in log_dict.items()]))
+                
+                # Log to wandb.
+                if self.config.wandb_log:
+                    wandb.log(log_dict, step=total_training_steps)
 
             # Save the checkpoint.
             do_save_checkpoint = False
@@ -324,7 +335,17 @@ class Trainer:
                 do_save_checkpoint = True
             if do_save_checkpoint:
                 print(f"Save checkpoint at epoch {current_epoch} step {total_training_steps}...")
-                assert False, "More code"
+                checkpoint = {
+                    "model": model.state_dict(),
+                    "optimizer": optimizer.state_dict(),
+                    "model_config": asdict(model.config),
+                    "step": total_training_steps,
+                    #"best_val_loss": best_val_loss,
+                    "config": asdict(self.config),
+                }
+                print(f"Saving checkpoint to {self.config.out_dir}")
+                checkpoint_name = f"checkpoint_{current_epoch:04d}{total_training_steps:08d}.pt"
+                torch.save(checkpoint, os.path.join(self.config.out_dir, checkpoint_name))
 
             # Stop the training if we are done.
             if stop_training:
