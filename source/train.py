@@ -67,7 +67,7 @@ class TrainingConfig:
 
     # adamw optimizer
     learning_rate: float = 6e-4  # Max learning rate.
-    max_iters: int = 600000  # Total number of training iterations.
+    max_iters: int = 10_000  # Total number of training iterations.
     weight_decay: float = 1e-1
     beta1: float = 0.9
     beta2: float = 0.95
@@ -76,7 +76,7 @@ class TrainingConfig:
     # learning rate decay settings
     decay_lr: bool = True  # Whether to decay the learning rate.
     warmup_iters: int = 2000  # How many steps to warm up for.
-    lr_decay_iters: int = 600000  # Should be ~= max_iters per Chinchilla.
+    lr_decay_iters: int = 10_000  # Should be ~= max_iters per Chinchilla.
     min_lr: float = 6e-5  # Minimum learning rate, should be ~= learning_rate/10 per Chinchilla.
 
     # DDP settings
@@ -115,7 +115,8 @@ model_config.dropout = 0.0
 model_config.bias = False
 model_config.block_size = 384
 model_config.bottleneck = "variational" # "simple" or "variational" or "none"
-model_config.bottleneck_depth = 4
+bottleneck_loss_coef = 100.0
+model_config.bottleneck_depth = 5
 
 # Set the output directory.
 config.out_dir = os.path.join(config.out_dir, f"transformer_{model_config.bottleneck}_{timestamp}")
@@ -376,7 +377,14 @@ def get_lr(it):
 # logging
 if config.wandb_log and master_process:
     import wandb
-    wandb.init(project=config.wandb_project, name=config.wandb_run_name, config=config)
+    wandb.init(
+        project=config.wandb_project,
+        name=config.wandb_run_name,
+        config={
+            "training_config": asdict(config),
+            "model_config": asdict(model_config),
+        }
+    )
 
 # training loop
 print("Starting training...")
