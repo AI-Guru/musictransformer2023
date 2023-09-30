@@ -28,7 +28,7 @@ from dataclasses import dataclass, asdict
 class TrainerConfig:
 
     # General.
-    num_epochs: int = 2
+    num_epochs: int = 100
 
     # Dataset.
     dataset_path = "data/jsfakes4bars/generation"
@@ -112,6 +112,13 @@ class Trainer:
 
     def train(self, model):
 
+        # Make sure the output folder exists.
+        os.makedirs(self.config.out_dir, exist_ok=True)
+
+        # Send the model to the device.
+        print(f"Sending the model to {self.config.device}...")
+        model = model.to(self.config.device)
+
         # Create the dataset.
         print("Creating dataset...")
         dataset_config = DatasetConfig()
@@ -142,9 +149,13 @@ class Trainer:
         
         # Compile the model.
         if self.config.compile:
-            print("compiling the model... (takes a ~minute)")
-            unoptimized_model = model
-            model = torch.compile(model) # requires PyTorch 2.0
+            # Check if the pytorch version is 2.0 or higher.
+            if not hasattr(torch, "compile"):
+                print("PyTorch 2.0 or higher is required to use the compile option.")
+            else:
+                print("Compiling the model...")
+                unoptimized_model = model
+                model = torch.compile(model)
 
         # Wrap model into DDP container.
         #if ddp:
@@ -249,6 +260,8 @@ class Trainer:
             #do_step = False # TODO Remove this.
             if do_step:
 
+                print(f"Epoch {current_epoch} step {total_training_steps}", end="\r")
+
                 # Unpack the batch.
                 encoder_ids_train, decoder_ids_train, target_ids_train = batch_train
 
@@ -317,6 +330,7 @@ class Trainer:
                 log_dict = { k: v for k, v in losses_dict_mean.items() }
                 log_dict["step"] = total_training_steps
                 log_dict["lr"] = lr
+                log_dict["epoch"] = current_epoch
                 #log_dict["mfu"] = mfu
 
                 # Log to terminal.
