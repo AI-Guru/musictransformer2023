@@ -6,6 +6,7 @@ import pickle
 from contextlib import nullcontext
 import json
 import multiprocessing
+import glob
 
 import numpy as np
 import torch
@@ -28,7 +29,7 @@ from dataclasses import dataclass, asdict
 class TrainerConfig:
 
     # General.
-    num_epochs: int = 100
+    num_epochs: int = 500
 
     # Dataset.
     dataset_path = "data/jsfakes4bars/generation"
@@ -51,8 +52,10 @@ class TrainerConfig:
     log_mode: str = "epochs"
 
     # When to save.
-    save_every: int = 1
+    save_every: int = 10
     save_mode: str = "epochs"
+    save_best: bool = True
+    save_last: bool = True
 
     # W&B logging.
     wandb_log: bool = False  # Disabled by default.
@@ -226,6 +229,7 @@ class Trainer:
         current_epoch = 0
         stop_training = False
         losses_dict = create_losses_dict()
+        best_val_loss = float("inf")
         while True:
 
             # Start the next epoch.
@@ -317,6 +321,29 @@ class Trainer:
                     losses_dict["val/bottleneck"].append(bottleneck_loss.item())
                 model.train()
 
+                # Save the best model.
+                if self.config.save_best:
+
+                    current_val_loss = np.mean(losses_dict["val/loss"])
+                    if current_val_loss < best_val_loss:
+                        best_val_loss = current_val_loss
+                        print(f"New best validation loss: {best_val_loss:.4f}")
+
+                        # Delete all checkpoints that have _best in the name.
+                        for checkpoint_path in glob.glob(os.path.join(self.config.out_dir, "*_best.pt")):
+                            os.remove(checkpoint_path)
+
+                        # Save the best model.                    
+                        print(f"Saving best model...")
+                        checkpoint_name = f"checkpoint_{current_epoch:04d}{total_training_steps:08d}_best.pt"
+                        self.save_checkpoint(
+                            model=model,
+                            optimizer=optimizer,
+                            step=total_training_steps,
+                            epoch=current_epoch,
+                            checkpoint_name=checkpoint_name,
+                        )
+
             # Log everything.
             do_log = False
             if self.config.log_mode == "epochs" and epoch_done and current_epoch % self.config.log_every == 0:
@@ -354,7 +381,7 @@ class Trainer:
                     model=model,
                     optimizer=optimizer,
                     step=total_training_steps,
-                    epoch=current_epoch
+                    epoch=current_epoch,
                     checkpoint_name=checkpoint_name,
                 )
 
@@ -363,15 +390,16 @@ class Trainer:
                 break
 
         # Save the final model.
-        print("Saving final model...")
-        checkpoint_name = f"checkpoint_{current_epoch:04d}{total_training_steps:08d}_last.pt"
-        self.save_checkpoint(
-            model=model,
-            optimizer=optimizer,
-            step=total_training_steps,
-            epoch=current_epoch
-            checkpoint_name=checkpoint_name,
-        )
+        if self.config.save_last:
+            print("Saving final model...")
+            checkpoint_name = f"checkpoint_{current_epoch:04d}{total_training_steps:08d}_last.pt"
+            self.save_checkpoint(
+                model=model,
+                optimizer=optimizer,
+                step=total_training_steps,
+                epoch=current_epoch,
+                checkpoint_name=checkpoint_name,
+            )
 
         # Clean up.
         if self.config.wandb_log:
