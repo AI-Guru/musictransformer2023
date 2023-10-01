@@ -78,7 +78,7 @@ class TrainerConfig:
     # learning rate decay settings
     decay_lr: bool = True  # Whether to decay the learning rate.
     warmup_iters: int = 2000  # How many steps to warm up for.
-    lr_decay_iters: int = 10_000  # Should be ~= max_iters per Chinchilla.
+    lr_decay_iters: int = 15_000  # Should be ~= max_iters per Chinchilla.
     min_lr: float = 6e-5  # Minimum learning rate, should be ~= learning_rate/10 per Chinchilla.
 
     # DDP settings
