@@ -124,12 +124,20 @@ class Trainer:
 
         # Create the dataset.
         print("Creating dataset...")
+        assert os.path.exists(self.config.dataset_path), f"Error: dataset path {self.config.dataset_path} does not exist."
         dataset_config = DatasetConfig()
         dataset_config.dataset_path = self.config.dataset_path
         dataset_config.number_of_processes = multiprocessing.cpu_count()
-        dataset_config.dataset_path = "data/jsfakes4bars/generation"
         dataset = Dataset(dataset_config, device=self.config.device, device_type=self.device_type)
         print(dataset)
+
+        # Create and save the tokenizer.
+        print("Creating and saving the tokenizer...")
+        tokenizer_vocabulary_path = os.path.join(self.config.out_dir, "tokenizer.json")
+        assert os.path.exists(os.path.join(self.config.dataset_path, "vocabulary.txt")), f"Error: vocabulary.txt does not exist in {config.dataset_path}."
+        tokenizer = Tokenizer.from_vocabulary_file(os.path.join(self.config.dataset_path, "vocabulary.txt"))
+        tokenizer.save(tokenizer_vocabulary_path)
+        del tokenizer
 
         #torch.manual_seed(1337 + seed_offset)
         torch.backends.cuda.matmul.allow_tf32 = True # allow tf32 on matmul
@@ -335,7 +343,7 @@ class Trainer:
 
                         # Save the best model.                    
                         print(f"Saving best model...")
-                        checkpoint_name = f"checkpoint_{current_epoch:04d}{total_training_steps:08d}_best.pt"
+                        checkpoint_name = f"checkpoint_{current_epoch:04d}_{total_training_steps:08d}_best.pt"
                         self.save_checkpoint(
                             model=model,
                             optimizer=optimizer,
@@ -376,7 +384,7 @@ class Trainer:
                 do_save_checkpoint = True
             if do_save_checkpoint:
                 print(f"Save checkpoint at epoch {current_epoch} step {total_training_steps}...")
-                checkpoint_name = f"checkpoint_{current_epoch:04d}{total_training_steps:08d}.pt"
+                checkpoint_name = f"checkpoint_{current_epoch:04d}_{total_training_steps:08d}.pt"
                 self.save_checkpoint(
                     model=model,
                     optimizer=optimizer,
@@ -392,7 +400,7 @@ class Trainer:
         # Save the final model.
         if self.config.save_last:
             print("Saving final model...")
-            checkpoint_name = f"checkpoint_{current_epoch:04d}{total_training_steps:08d}_last.pt"
+            checkpoint_name = f"checkpoint_{current_epoch:04d}_{total_training_steps:08d}_last.pt"
             self.save_checkpoint(
                 model=model,
                 optimizer=optimizer,
@@ -415,8 +423,8 @@ class Trainer:
             "model": model.state_dict(),
             "optimizer": optimizer.state_dict(),
             "model_config": asdict(model.config),
-            "step": total_training_steps,
-            "epoch": current_epoch,
+            "step": step,
+            "epoch": epoch,
             #"best_val_loss": best_val_loss,
             "config": asdict(self.config),
         }

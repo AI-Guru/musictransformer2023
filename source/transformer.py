@@ -20,6 +20,7 @@ from source.bottlenecks import (
     SimpleBottleneck,
     VariationalBottleneck,
 )
+from source.tokenizer import Tokenizer
 
 @dataclass
 class TransformerConfig:
