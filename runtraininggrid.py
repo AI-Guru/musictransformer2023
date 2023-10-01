@@ -11,7 +11,7 @@ from source.tokenizer import Tokenizer
 
 
 def grid_search():
-    num_epochs = 10 #500
+    num_epochs = 500
     info = "info" in sys.argv
     train(n_layer=2, n_head=2, n_embd=256, num_epochs=num_epochs, info=info)
     train(n_layer=4, n_head=4, n_embd=256, num_epochs=num_epochs, info=info)
