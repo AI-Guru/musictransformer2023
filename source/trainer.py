@@ -349,21 +349,29 @@ class Trainer:
                 do_save_checkpoint = True
             if do_save_checkpoint:
                 print(f"Save checkpoint at epoch {current_epoch} step {total_training_steps}...")
-                checkpoint = {
-                    "model": model.state_dict(),
-                    "optimizer": optimizer.state_dict(),
-                    "model_config": asdict(model.config),
-                    "step": total_training_steps,
-                    #"best_val_loss": best_val_loss,
-                    "config": asdict(self.config),
-                }
-                print(f"Saving checkpoint to {self.config.out_dir}")
                 checkpoint_name = f"checkpoint_{current_epoch:04d}{total_training_steps:08d}.pt"
-                torch.save(checkpoint, os.path.join(self.config.out_dir, checkpoint_name))
+                self.save_checkpoint(
+                    model=model,
+                    optimizer=optimizer,
+                    step=total_training_steps,
+                    epoch=current_epoch
+                    checkpoint_name=checkpoint_name,
+                )
 
             # Stop the training if we are done.
             if stop_training:
                 break
+
+        # Save the final model.
+        print("Saving final model...")
+        checkpoint_name = f"checkpoint_{current_epoch:04d}{total_training_steps:08d}_last.pt"
+        self.save_checkpoint(
+            model=model,
+            optimizer=optimizer,
+            step=total_training_steps,
+            epoch=current_epoch
+            checkpoint_name=checkpoint_name,
+        )
 
         # Clean up.
         if self.config.wandb_log:
@@ -374,3 +382,30 @@ class Trainer:
         training_elapsed_time = time.time() - training_start_time
         print(f"Total steps: {total_training_steps} elapsed time: {datetime.timedelta(seconds=training_elapsed_time)}")
 
+    def save_checkpoint(self, model, optimizer, step, epoch, checkpoint_name):
+        checkpoint = {
+            "model": model.state_dict(),
+            "optimizer": optimizer.state_dict(),
+            "model_config": asdict(model.config),
+            "step": total_training_steps,
+            "epoch": current_epoch,
+            #"best_val_loss": best_val_loss,
+            "config": asdict(self.config),
+        }
+        checkpoint_path = os.path.join(self.config.out_dir, checkpoint_name)
+        torch.save(checkpoint, checkpoint_path)
+        print(f"Saved checkpoint: {checkpoint_path}")
+
+    def info(self, model):
+
+        # Print model config.
+        print("Model config:")
+        for key, value in model.config.__dict__.items():
+            print(f"  {key}: {value}")
+
+        # Print the latent space size.
+        shape = model.get_bottleneck_shape()
+        print(f"Latent space size: {shape} ({np.prod(shape)} units)")
+
+        # Done.
+        print("")

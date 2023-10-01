@@ -11,13 +11,14 @@ from source.tokenizer import Tokenizer
 
 
 def grid_search():
-    train(n_layer=2, n_head=2, n_embd=256)
-    train(n_layer=4, n_head=4, n_embd=256)
-    train(n_layer=6, n_head=8, n_embd=256)
-    train(n_layer=8, n_head=8, n_embd=256)
+    info = "info" in sys.argv
+    train(n_layer=2, n_head=2, n_embd=256, info=info)
+    train(n_layer=4, n_head=4, n_embd=256, info=info)
+    train(n_layer=6, n_head=8, n_embd=256, info=info)
+    train(n_layer=8, n_head=8, n_embd=256, info=info)
 
 
-def train(n_layer=2, n_head=2, n_embd=128, dropout=0, bottleneck_depth=5):
+def train(n_layer=2, n_head=2, n_embd=128, dropout=0, bottleneck_depth=5, info=False):
     # Get the timestamp as YYYYMMDD-HHMM.
     timestamp = datetime.datetime.now().strftime("%Y%m%d-%H%M")
 
@@ -51,7 +52,12 @@ def train(n_layer=2, n_head=2, n_embd=128, dropout=0, bottleneck_depth=5):
 
     # Create the trainer.
     trainer = Trainer(trainer_config)
-    trainer.train(model)
+
+    # Train or info.
+    if not info:
+        trainer.train(model)
+    else:
+        trainer.info(model)
 
 
 if __name__ == "__main__":
