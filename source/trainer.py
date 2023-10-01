@@ -365,6 +365,11 @@ class Trainer:
             if stop_training:
                 break
 
+        # Clean up.
+        if self.config.wandb_log:
+            wandb.finish()
+        torch.cuda.empty_cache()
+
         # Done.
         training_elapsed_time = time.time() - training_start_time
         print(f"Total steps: {total_training_steps} elapsed time: {datetime.timedelta(seconds=training_elapsed_time)}")
