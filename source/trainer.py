@@ -52,7 +52,7 @@ class TrainerConfig:
     log_mode: str = "epochs"
 
     # When to save.
-    save_every: int = 10
+    save_every: int = 50
     save_mode: str = "epochs"
     save_best: bool = True
     save_last: bool = True
@@ -69,7 +69,7 @@ class TrainerConfig:
 
     # Optimizer settings.
     learning_rate: float = 6e-4  # Max learning rate.
-    max_iters: int = 10_000  # Total number of training iterations.
+    max_iters: int = 15_000  # Total number of training iterations.
     weight_decay: float = 1e-1
     beta1: float = 0.9
     beta2: float = 0.95
@@ -251,7 +251,7 @@ class Trainer:
         current_epoch = 0
         stop_training = False
         losses_dict = create_losses_dict()
-        best_val_loss = float("inf")
+        best_losses = { key: float ("inf") for key in losses_dict.keys() }
         while True:
 
             # Start the next epoch.
@@ -346,25 +346,25 @@ class Trainer:
                 # Save the best model.
                 if self.config.save_best:
 
-                    current_val_loss = np.mean(losses_dict["val/loss"])
-                    if current_val_loss < best_val_loss:
-                        best_val_loss = current_val_loss
-                        print(f"New best validation loss: {best_val_loss:.4f}")
+                    for key, value in losses_dict.items():
+                        if np.mean(value) < best_losses[key]:
+                            best_losses[key] = np.mean(value)
+                            print(f"New best {key}: {best_losses[key]:.4f}")
 
-                        # Delete all checkpoints that have _best in the name.
-                        for checkpoint_path in glob.glob(os.path.join(self.config.out_dir, "*_best.pt")):
-                            os.remove(checkpoint_path)
+                            # Delete all checkpoints that have _best in the name.
+                            for checkpoint_path in glob.glob(os.path.join(self.config.out_dir, f"*_{key.replace('/', '-')}_best.pt")):
+                                os.remove(checkpoint_path)
 
-                        # Save the best model.                    
-                        print(f"Saving best model...")
-                        checkpoint_name = f"checkpoint_{current_epoch:04d}_{total_training_steps:08d}_best.pt"
-                        self.save_checkpoint(
-                            model=model,
-                            optimizer=optimizer,
-                            step=total_training_steps,
-                            epoch=current_epoch,
-                            checkpoint_name=checkpoint_name,
-                        )
+                            # Save the best model.                    
+                            print(f"Saving best model...")
+                            checkpoint_name = f"checkpoint_{current_epoch:04d}_{total_training_steps:08d}_{key.replace('/', '-')}_best.pt"
+                            self.save_checkpoint(
+                                model=model,
+                                optimizer=optimizer,
+                                step=total_training_steps,
+                                epoch=current_epoch,
+                                checkpoint_name=checkpoint_name,
+                            )
 
             # Log everything.
             do_log = False
