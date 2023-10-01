@@ -34,6 +34,8 @@ class TransformerConfig:
     bottleneck: str = "none"
     bottleneck_loss_coef: float = 100.0
     bottleneck_depth: int = 4
+    flash_attention: bool = False
+    
 
 class Transformer(nn.Module):
 
