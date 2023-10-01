@@ -20,7 +20,7 @@ sys.path.append(".")
 
 #from model import GPTConfig, GPT
 from source.dataset import DatasetConfig, Dataset
-#from source.transformer import TransformerConfig, Transformer
+from source.transformer import TransformerConfig, Transformer
 from source.tokenizer import Tokenizer
 
 from dataclasses import dataclass, asdict
@@ -121,6 +121,20 @@ class Trainer:
         # Send the model to the device.
         print(f"Sending the model to {self.config.device}...")
         model = model.to(self.config.device)
+
+        # Test if the model can be saved and loaded.
+        print("Testing if the model can be saved and loaded...")
+        checkpoint_path = os.path.join(self.config.out_dir, "test_checkpoint.pt")
+        checkpoint_path = self.save_checkpoint(
+            model=model,
+            optimizer=None,
+            step=None,
+            epoch=None,
+            checkpoint_name="test_checkpoint.pt",
+        )
+        _ = Transformer.load(checkpoint_path)
+        os.remove(checkpoint_path)
+        print("Model can be saved and loaded.")
 
         # Create the dataset.
         print("Creating dataset...")
@@ -419,18 +433,25 @@ class Trainer:
         print(f"Total steps: {total_training_steps} elapsed time: {datetime.timedelta(seconds=training_elapsed_time)}")
 
     def save_checkpoint(self, model, optimizer, step, epoch, checkpoint_name):
-        checkpoint = {
-            "model": model.state_dict(),
-            "optimizer": optimizer.state_dict(),
-            "model_config": asdict(model.config),
-            "step": step,
-            "epoch": epoch,
-            #"best_val_loss": best_val_loss,
-            "config": asdict(self.config),
-        }
+        
+        # Create the checkpoint dictionary.
+        checkpoint = {}
+        if model is not None:
+            checkpoint["model"] = model.state_dict()
+            checkpoint["model_config"] = asdict(model.config)
+        if optimizer is not None:
+            checkpoint["optimizer"] = optimizer.state_dict()
+        if step is not None:
+            checkpoint["step"] = step
+        if epoch is not None:
+            checkpoint["epoch"] = epoch
+        checkpoint["config"] = asdict(self.config)
+        
+        # Save the checkpoint.
         checkpoint_path = os.path.join(self.config.out_dir, checkpoint_name)
         torch.save(checkpoint, checkpoint_path)
         print(f"Saved checkpoint: {checkpoint_path}")
+        return checkpoint_path
 
     def info(self, model):
 

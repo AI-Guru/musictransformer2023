@@ -407,6 +407,27 @@ class Transformer(nn.Module):
         # Create the model.
         model = Transformer(model_config)
 
+        # Get the keys of the state dict. Sort them and make a list.
+        state_dict_keys = model.state_dict().keys()
+        state_dict_keys = sorted(state_dict_keys)
+
+        # Get the keys of the loaded state dict. Sort them and make a list.
+        loaded_state_dict_keys = checkpoint["model"].keys()
+        loaded_state_dict_keys = sorted(loaded_state_dict_keys)
+
+        # Get the keys that both lists have in common. XOR.
+        #common_keys = set(state_dict_keys).intersection(loaded_state_dict_keys)
+        #print(f"common_keys: {len(common_keys)}")
+
+        # Get the keys that they don't have in common. XOR.
+        missing_keys = set(state_dict_keys).symmetric_difference(loaded_state_dict_keys)
+        if len(missing_keys) > 0:
+            raise Exception(f"Missing {len(missing_keys)} keys: {missing_keys}")
+        
+
+        # Both lists should have the same length.
+        assert len(state_dict_keys) == len(loaded_state_dict_keys), f"Length of state_dict_keys ({len(state_dict_keys)}) does not match length of loaded_state_dict_keys ({len(loaded_state_dict_keys)})"
+
         # Load the state dict into the model.
         model.load_state_dict(checkpoint["model"])
 
