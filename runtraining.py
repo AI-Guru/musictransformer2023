@@ -13,8 +13,6 @@ def train():
     # Get the timestamp as YYYYMMDD-HHMM.
     timestamp = datetime.datetime.now().strftime("%Y%m%d-%H%M")
 
-
-    
     # Create the training config.
     trainer_config = TrainerConfig(
         device="auto"
@@ -31,7 +29,7 @@ def train():
 
     # Create the model config.
     model_config = TransformerConfig()
-    model_config.vocab_size = 118
+    model_config.vocab_size = 128
     model_config.n_layer = 8
     model_config.n_head = 8
     model_config.n_embd = 512

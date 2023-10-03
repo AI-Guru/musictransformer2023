@@ -99,6 +99,8 @@ class Dataset:
                 do_token_dropout = True
         
         # If so get the mask token and the other relevant variables.
+        do_token_dropout_encoder = False
+        do_token_dropout_decoder = False
         if do_token_dropout:
             if self.config.token_dropout_mask_token == "all":
                 mask_tokens = list(range(len(self.vocabulary)))

@@ -192,6 +192,18 @@ class Trainer:
         # Inform the dataset about the device.
         dataset.set_device(self.config.device, self.device_type)
 
+        # Save the configs of the model and the trainer and the dataset.
+        print("Saving the configs...")
+        model_config_path = os.path.join(self.config.out_dir, "model_config.json")
+        with open(model_config_path, "w") as model_config_file:
+            json.dump(asdict(model.config), model_config_file, indent=4)
+        trainer_config_path = os.path.join(self.config.out_dir, "trainer_config.json")
+        with open(trainer_config_path, "w") as trainer_config_file:
+            json.dump(asdict(self.config), trainer_config_file, indent=4)
+        dataset_config_path = os.path.join(self.config.out_dir, "dataset_config.json")
+        with open(dataset_config_path, "w") as dataset_config_file:
+            json.dump(asdict(dataset.config), dataset_config_file, indent=4)
+
         # Create and save the tokenizer.
         print("Creating and saving the tokenizer...")
         tokenizer_vocabulary_path = os.path.join(self.config.out_dir, "tokenizer.json")
@@ -279,6 +291,7 @@ class Trainer:
                 config={
                     "training_config": asdict(self.config),
                     "model_config": asdict(model.config),
+                    "dataset_config": asdict(dataset.config),
                 }
             )
 
@@ -492,7 +505,7 @@ class Trainer:
             checkpoint["step"] = step
         if epoch is not None:
             checkpoint["epoch"] = epoch
-        checkpoint["config"] = asdict(self.config)
+        #checkpoint["config"] = asdict(self.config)
         
         # Save the checkpoint.
         checkpoint_path = os.path.join(self.config.out_dir, checkpoint_name)
