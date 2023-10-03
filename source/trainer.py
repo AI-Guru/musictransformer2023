@@ -86,6 +86,10 @@ class TrainerConfig:
     compile: bool = True  # Use PyTorch 2.0 to compile the model to be faster.
 
     def __post_init__(self):
+
+        self.validate()
+
+    def validate(self):
         # General.
         assert isinstance(self.num_epochs, int) and self.num_epochs > 0, "num_epochs must be a positive integer"
 
@@ -157,10 +161,10 @@ class Trainer:
             print("Warning: device is cpu. This will be slow.")
         else:
             print(f"Device: {config.device}")
+        config.validate()
         self.config = config
 
         self.device_type = "cuda" if "cuda" in config.device else "cpu"
-
 
     def train(self, model, dataset):
 

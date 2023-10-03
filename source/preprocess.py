@@ -58,7 +58,7 @@ def peprocess(
     vocabulary = sorted(vocabulary)
 
     # We need to add the special tokens.
-    vocabulary = ["[UNK]", "PAD", "SOS", "EOS"] + vocabulary
+    vocabulary = ["[UNK]", "[PAD]", "[SOS]", "[EOS]", "[TDR]"] + vocabulary
 
     # Save the vocabulary.
     vocabulary_file_path = os.path.join(output_path, "vocabulary.txt")
