@@ -24,6 +24,7 @@ from source.transformer import TransformerConfig, Transformer
 from source.tokenizer import Tokenizer
 
 from dataclasses import dataclass, asdict
+from typing import Union
 
 @dataclass
 class TrainerConfig:
@@ -32,15 +33,10 @@ class TrainerConfig:
     num_epochs: int = 500
 
     # Dataset.
-    dataset_path = "data/jsfakes4bars/generation"
+    #dataset_path = "data/jsfakes4bars/generation"
 
     # I/O
     out_dir: str = "out"
-    #eval_interval: int = 200
-    #log_interval: int = 1
-    #eval_iters: int = 200
-    #eval_only: bool = False  # If True, script exits right after the first eval.
-    #always_save_checkpoint: bool = True  # If True, always save a checkpoint after each eval.
     init_from: str = "scratch"  # 'scratch' or 'resume' or 'gpt2*'.
     
     # When to evaluate.
@@ -89,6 +85,59 @@ class TrainerConfig:
     dtype: str = "bfloat16" if ("torch" in locals() or "torch" in globals()) and torch.cuda.is_available() and torch.cuda.is_bf16_supported() else "float16"  # 'float32', 'bfloat16', or 'float16', the latter will auto implement a GradScaler.
     compile: bool = True  # Use PyTorch 2.0 to compile the model to be faster.
 
+    def __post_init__(self):
+        # General.
+        assert isinstance(self.num_epochs, int) and self.num_epochs > 0, "num_epochs must be a positive integer"
+
+        # I/O
+        assert isinstance(self.out_dir, str), "out_dir must be a string"
+        assert self.init_from in ['scratch', 'resume', 'gpt2*'], "init_from must be 'scratch', 'resume', or 'gpt2*'"
+
+        # When to evaluate.
+        assert isinstance(self.eval_every, int) and self.eval_every > 0, "eval_every must be a positive integer"
+        assert self.eval_mode in ['epochs', 'steps'], "eval_mode must be 'epochs' or 'steps'"
+
+        # When to log.
+        assert isinstance(self.log_every, int) and self.log_every > 0, "log_every must be a positive integer"
+        assert self.log_mode in ['epochs', 'steps'], "log_mode must be 'epochs' or 'steps'"
+
+        # When to save.
+        assert isinstance(self.save_every, int) and self.save_every > 0, "save_every must be a positive integer"
+        assert self.save_mode in ['epochs', 'steps'], "save_mode must be 'epochs' or 'steps'"
+        assert isinstance(self.save_best, bool), "save_best must be a boolean"
+        assert isinstance(self.save_last, bool), "save_last must be a boolean"
+
+        # W&B logging.
+        assert isinstance(self.wandb_log, bool), "wandb_log must be a boolean"
+        assert isinstance(self.wandb_project, str), "wandb_project must be a string"
+        assert isinstance(self.wandb_run_name, str), "wandb_run_name must be a string"
+
+        # data
+        assert isinstance(self.gradient_accumulation_steps, int) and self.gradient_accumulation_steps > 0, "gradient_accumulation_steps must be a positive integer"
+        assert isinstance(self.batch_size, int) and self.batch_size > 0, "batch_size must be a positive integer"
+
+        # Optimizer settings.
+        assert isinstance(self.learning_rate, float) and self.learning_rate > 0, "learning_rate must be a positive float"
+        assert isinstance(self.max_iters, int) and self.max_iters > 0, "max_iters must be a positive integer"
+        assert isinstance(self.weight_decay, float) and self.weight_decay >= 0, "weight_decay must be a non-negative float"
+        assert isinstance(self.beta1, float) and 0 <= self.beta1 <= 1, "beta1 must be a float between 0 and 1"
+        assert isinstance(self.beta2, float) and 0 <= self.beta2 <= 1, "beta2 must be a float between 0 and 1"
+        assert isinstance(self.grad_clip, float) and self.grad_clip >= 0, "grad_clip must be a non-negative float"
+
+        # learning rate decay settings
+        assert isinstance(self.decay_lr, bool), "decay_lr must be a boolean"
+        assert isinstance(self.warmup_iters, int) and self.warmup_iters >= 0, "warmup_iters must be a non-negative integer"
+        assert isinstance(self.lr_decay_iters, int) and self.lr_decay_iters > 0, "lr_decay_iters must be a positive integer"
+        assert isinstance(self.min_lr, float) and self.min_lr > 0, "min_lr must be a positive float"
+
+        # DDP settings
+        assert isinstance(self.backend, str), "backend must be a string"
+
+        # system
+        assert isinstance(self.device, str), "device must be a string"
+        assert self.dtype in ["float32", "bfloat16", "float16"], "dtype must be 'float32', 'bfloat16', or 'float16'"
+        assert isinstance(self.compile, bool), "compile must be a boolean"
+
 
 class Trainer:
 
@@ -113,7 +162,7 @@ class Trainer:
         self.device_type = "cuda" if "cuda" in config.device else "cpu"
 
 
-    def train(self, model):
+    def train(self, model, dataset):
 
         # Make sure the output folder exists.
         os.makedirs(self.config.out_dir, exist_ok=True)
@@ -136,20 +185,14 @@ class Trainer:
         os.remove(checkpoint_path)
         print("Model can be saved and loaded.")
 
-        # Create the dataset.
-        print("Creating dataset...")
-        assert os.path.exists(self.config.dataset_path), f"Error: dataset path {self.config.dataset_path} does not exist."
-        dataset_config = DatasetConfig()
-        dataset_config.dataset_path = self.config.dataset_path
-        dataset_config.number_of_processes = multiprocessing.cpu_count()
-        dataset = Dataset(dataset_config, device=self.config.device, device_type=self.device_type)
-        print(dataset)
+        # Inform the dataset about the device.
+        dataset.set_device(self.config.device, self.device_type)
 
         # Create and save the tokenizer.
         print("Creating and saving the tokenizer...")
         tokenizer_vocabulary_path = os.path.join(self.config.out_dir, "tokenizer.json")
-        assert os.path.exists(os.path.join(self.config.dataset_path, "vocabulary.txt")), f"Error: vocabulary.txt does not exist in {config.dataset_path}."
-        tokenizer = Tokenizer.from_vocabulary_file(os.path.join(self.config.dataset_path, "vocabulary.txt"))
+        assert os.path.exists(os.path.join(dataset.config.dataset_path, "vocabulary.txt")), f"Error: vocabulary.txt does not exist in {config.dataset_path}."
+        tokenizer = Tokenizer.from_vocabulary_file(os.path.join(dataset.config.dataset_path, "vocabulary.txt"))
         tokenizer.save(tokenizer_vocabulary_path)
         del tokenizer
 

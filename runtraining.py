@@ -6,15 +6,28 @@ sys.path.append(".")
 from source.trainer import TrainerConfig, Trainer
 from source.transformer import TransformerConfig, Transformer
 from source.tokenizer import Tokenizer
+from source.dataset import DatasetConfig, Dataset
 
 
 def train():
     # Get the timestamp as YYYYMMDD-HHMM.
     timestamp = datetime.datetime.now().strftime("%Y%m%d-%H%M")
 
+
+    
     # Create the training config.
-    trainer_config = TrainerConfig()
-    trainer_config.device = "auto"
+    trainer_config = TrainerConfig(
+        device="auto"
+    )
+
+    # Create the dataset config and dataset.
+    dataset_config = DatasetConfig(
+        dataset_path = "data/jsfakes4bars/generation"
+    )
+    dataset = Dataset(
+        dataset_config,
+    )
+    print(dataset)
 
     # Create the model config.
     model_config = TransformerConfig()
@@ -26,7 +39,6 @@ def train():
     model_config.bias = False
     model_config.block_size = 384
     model_config.bottleneck = "variational" # "simple" or "variational" or "none"
-    bottleneck_loss_coef = 100.0
     model_config.bottleneck_depth = 5
 
     # Set the output directory.
@@ -42,7 +54,7 @@ def train():
 
     # Create the trainer.
     trainer = Trainer(trainer_config)
-    trainer.train(model)
+    trainer.train(model, dataset)
 
 if __name__ == "__main__":
     train()
