@@ -9,7 +9,7 @@ import numpy as np
 @dataclass
 class DatasetConfig:
     dataset_path: str = None
-    number_of_processes: int = 1
+    number_of_processes: Union[str, int] = "auto"
 
     # Token dropout settings.
     # Note: Copied verbatim from trainer.
@@ -26,7 +26,7 @@ class DatasetConfig:
     def validate(self):
         assert self.dataset_path is not None, "Error: Dataset path not set."
         assert os.path.exists(self.dataset_path), f"Error: {self.dataset_path} does not exist."
-        assert self.number_of_processes > 0, f"Error: Number of processes must be greater than 0. Got {self.number_of_processes}."
+        assert self.number_of_processes == "auto" or self.number_of_processes > 0, "Error: number_of_processes must be 'auto' or a positive integer."
 
          # Token dropout settings.
         assert isinstance(self.token_dropout, bool), "token_dropout must be a boolean"
@@ -43,6 +43,10 @@ class Dataset:
         
         # Validate the config.
         config.validate()
+
+        # Set the number of processes.
+        if config.number_of_processes == "auto":
+            config.number_of_processes = os.cpu_count()
 
         # Save the config.
         self.config = config
@@ -113,18 +117,25 @@ class Dataset:
             do_token_dropout_decoder = True
             do_token_dropout_encoder = self.config.token_dropout_encoder
 
-        # Define the token dropout function.
-        def apply_token_dropout(ids_batch):
-            ids_batch_augmented = []
-            for ids in ids_batch:
-                ids_augmented = []
-                for id in ids:
-                    if np.random.rand() < token_dropout_probability:
-                        ids_augmented.append(np.random.choice(mask_tokens))
-                    else:
-                        ids_augmented.append(id)
-                ids_batch_augmented.append(ids_augmented)
-            return ids_batch_augmented
+        def apply_token_dropout(ids):
+            ids_augmented = []
+            for id in ids:
+                if np.random.rand() < token_dropout_probability:
+                    ids_augmented.append(np.random.choice(mask_tokens))
+                else:
+                    ids_augmented.append(id)
+            return ids_augmented
+
+        def apply_token_droupout_function(x):
+            if do_token_dropout_encoder:
+                x["encoder_ids"] = apply_token_dropout(x["encoder_ids"])
+            if do_token_dropout_decoder:
+                x["decoder_ids"] = apply_token_dropout(x["decoder_ids"])
+            return x
+
+        # Apply the token dropout function.
+        if do_token_dropout:
+            dataset = dataset.map(apply_token_droupout_function, num_proc=self.config.number_of_processes) 
 
         # Map into batches.
         def group_batch(batch):
@@ -136,12 +147,6 @@ class Dataset:
             encoder_ids = batch["encoder_ids"]
             decoder_ids = batch["decoder_ids"]
             target_ids = batch["target_ids"]
-
-            # Do token dropout if necessary.
-            if do_token_dropout_encoder:
-                encoder_ids = apply_token_dropout(encoder_ids)
-            if do_token_dropout_decoder:
-                decoder_ids = apply_token_dropout(decoder_ids)
 
             # Convert to torch tensors.
             encoder_ids = torch.tensor(encoder_ids).long()
