@@ -32,7 +32,7 @@ class TransformerConfig:
     dropout: float = 0.0
     bias: bool = True # True: bias in Linears and LayerNorms, like GPT-2. False: a bit better and faster
     bottleneck: str = "none"
-    bottleneck_loss_coef: float = 100.0
+    #bottleneck_loss_coef: float = 100.0
     bottleneck_depth: int = 4
     flash_attention: bool = False
     
@@ -134,7 +134,7 @@ class Transformer(nn.Module):
         bottleneck_loss = 0.0
         if self.bottleneck is not None:
             x_encoder, bottleneck_loss = self.bottleneck(x_encoder, return_loss=True) 
-            bottleneck_loss = bottleneck_loss * self.config.bottleneck_loss_coef
+            #bottleneck_loss = bottleneck_loss * self.config.bottleneck_loss_coef
 
         # Forward the decoder.
         tok_emb_decoder = self.decoder.wte(decoder_ids) # token embeddings of shape (b, t, n_embd)
@@ -149,7 +149,7 @@ class Transformer(nn.Module):
             logits = self.lm_head(x_decoder)
             reconstruction_loss = F.cross_entropy(logits.view(-1, logits.size(-1)), target_ids.view(-1), ignore_index=-1)
             loss = reconstruction_loss + bottleneck_loss
-            return logits, loss, reconstruction_loss, bottleneck_loss
+            return logits, reconstruction_loss, bottleneck_loss
         else:
             # inference-time mini-optimization: only forward the lm_head on the very last position
             logits = self.lm_head(x_decoder[:, [-1], :]) # note: using list [-1] to preserve the time dim

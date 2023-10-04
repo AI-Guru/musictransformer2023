@@ -21,6 +21,8 @@ def train():
     # Create the dataset config and dataset.
     dataset_config = DatasetConfig(
         dataset_path = "data/jsfakes4bars/generation"
+        token_dropout = False # No data augmentation.
+
     )
     dataset = Dataset(
         dataset_config,
@@ -28,16 +30,17 @@ def train():
     print(dataset)
 
     # Create the model config.
-    model_config = TransformerConfig()
-    model_config.vocab_size = 128
-    model_config.n_layer = 8
-    model_config.n_head = 8
-    model_config.n_embd = 512
-    model_config.dropout = 0.0
-    model_config.bias = False
-    model_config.block_size = 384
-    model_config.bottleneck = "variational" # "simple" or "variational" or "none"
-    model_config.bottleneck_depth = 5
+    model_config = TransformerConfig(
+        vocab_size = 128,
+        n_layer = 8,
+        n_head = 8,
+        n_embd = 512,
+        dropout = 0.0,
+        bias = False,
+        block_size = 384,
+        bottleneck = "variational", # "simple" or "variational" or "none"
+        bottleneck_depth = 5
+    )
 
     # Set the output directory.
     trainer_config.out_dir = os.path.join(trainer_config.out_dir, f"transformer_{model_config.bottleneck}_{timestamp}")
@@ -46,6 +49,9 @@ def train():
     trainer_config.wandb_log = True
     trainer_config.wandb_project = "bottleneck-transformers-DEV"
     trainer_config.wandb_run_name = f"transformer_{model_config.bottleneck}_{timestamp}"
+    trainer_config.wandb_group = "transformer"
+    bottleneck_loss_coefficient = 1.0 # The beta of the variational bottleneck loss. Start value.
+    bottleneck_loss_coefficient_max = 1.0 # End value.
 
     # Create the model.
     model = Transformer(model_config)

@@ -13,7 +13,7 @@ def test_dataset():
     # Create the dataset config and dataset.
     dataset_config = DatasetConfig(
         dataset_path = "data/jsfakes4bars/generation",
-        token_dropout_mask_token = "[TDR]"
+        token_dropout_mask_token = 666# "[TDR]"
     )
     dataset = Dataset(
         dataset_config,

@@ -71,11 +71,16 @@ class TrainerConfig:
     beta2: float = 0.95
     grad_clip: float = 1.0  # Clip gradients at this value, or disable if == 0.0.
 
-    # learning rate decay settings
+    # Learning rate decay settings.
     decay_lr: bool = True  # Whether to decay the learning rate.
     warmup_iters: int = 2000  # How many steps to warm up for.
     lr_decay_iters: int = 15_000  # Should be ~= max_iters per Chinchilla.
     min_lr: float = 6e-5  # Minimum learning rate, should be ~= learning_rate/10 per Chinchilla.
+
+    # Bottleneck loss settings.
+    bottleneck_loss_coefficient: float = 0.0  # How much to weight the bottleneck loss.
+    bottleneck_loss_coefficient_max: float = 1.0  # The maximum bottleneck loss coefficient.
+    bottleneck_loss_iterations: int = 15_000  # How many iterations to ramp up the bottleneck loss coefficient.
 
     # DDP settings
     backend: str = "nccl"  # 'nccl', 'gloo', etc.
@@ -258,7 +263,8 @@ class Trainer:
                 for k in range(self.config.eval_iters):
                     encoder_ids, decoder_ids, target_ids = get_batch(split)
                     with ctx:
-                        logits, loss, reconstruction_loss, bottleneck_loss = model(encoder_ids, decoder_ids, target_ids)
+                        logits, reconstruction_loss, bottleneck_loss = model(encoder_ids, decoder_ids, target_ids)
+                    loss = reconstruction_loss + bottleneck_loss_coefficient * bottleneck_loss
                     losses[k] = loss.item()
                     reconstruction_losses[k] = reconstruction_loss.item()
                     bottleneck_losses[k] = bottleneck_loss.item()
@@ -269,18 +275,26 @@ class Trainer:
             return out
 
         # learning rate decay scheduler (cosine with warmup)
-        def get_lr(it):
+        def get_learning_rate(iteration):
             # 1) linear warmup for warmup_iters steps
-            if it < self.config.warmup_iters:
-                return self.config.learning_rate * it / self.config.warmup_iters
-            # 2) if it > lr_decay_iters, return min learning rate
-            if it > self.config.lr_decay_iters:
+            if iteration < self.config.warmup_iters:
+                return self.config.learning_rate * iteration / self.config.warmup_iters
+            # 2) if iteration > lr_decay_iters, return min learning rate
+            if iteration > self.config.lr_decay_iters:
                 return self.config.min_lr
             # 3) in between, use cosine decay down to min learning rate
-            decay_ratio = (it - self.config.warmup_iters) / (self.config.lr_decay_iters - self.config.warmup_iters)
+            decay_ratio = (iteration - self.config.warmup_iters) / (self.config.lr_decay_iters - self.config.warmup_iters)
             assert 0 <= decay_ratio <= 1
             coeff = 0.5 * (1.0 + math.cos(math.pi * decay_ratio)) # coeff ranges 0..1
             return self.config.min_lr + coeff * (self.config.learning_rate - self.config.min_lr)
+
+        # The bottleneck loss coefficient scheduler.
+        def get_bottleneck_loss_coefficient(iteration):
+            if iteration < self.config.bottleneck_loss_iterations:
+                return self.config.bottleneck_loss_coefficient_max * iteration / self.config.bottleneck_loss_iterations
+            else:
+                return self.config.bottleneck_loss_coefficient_max
+            
 
         # logging
         if self.config.wandb_log:# and master_process: #TODO
@@ -352,13 +366,17 @@ class Trainer:
                 encoder_ids_train, decoder_ids_train, target_ids_train = batch_train
 
                 # Get the learning rate.
-                lr = get_lr(total_training_steps) if self.config.decay_lr else self.config.learning_rate
+                lr = get_learning_rate(total_training_steps) if self.config.decay_lr else self.config.learning_rate
                 for param_group in optimizer.param_groups:
                     param_group["lr"] = lr
 
+                # Get the bottleneck loss coefficient.
+                bottleneck_loss_coefficient = get_bottleneck_loss_coefficient(total_training_steps)
+
                 # Forward pass and get the loss.
-                _, loss, reconstruction_loss, bottleneck_loss = model(encoder_ids_train, decoder_ids_train, target_ids_train)
-                
+                _, reconstruction_loss, bottleneck_loss = model(encoder_ids_train, decoder_ids_train, target_ids_train)
+                loss = reconstruction_loss + bottleneck_loss_coefficient * bottleneck_loss
+
                 # Update epoch loss.
                 losses_dict["train/loss"].append(loss.item())
                 losses_dict["train/reconstruction"].append(reconstruction_loss.item())
@@ -395,7 +413,9 @@ class Trainer:
                 model.eval()
                 for encoder_ids_validate, decoder_ids_validate, target_ids_validate in dataset.iterate(split="validate", shuffle=False, batch_size=self.config.batch_size):
                     # Forward pass and get the losses.
-                    _, loss, reconstruction_loss, bottleneck_loss = model(encoder_ids_validate, decoder_ids_validate, target_ids_validate)
+                    _, reconstruction_loss, bottleneck_loss = model(encoder_ids_validate, decoder_ids_validate, target_ids_validate)
+
+                    loss = reconstruction_loss + bottleneck_loss_coefficient * bottleneck_loss
 
                     # Update epoch loss.
                     losses_dict["val/loss"].append(loss.item())
@@ -440,6 +460,7 @@ class Trainer:
                 log_dict["step"] = total_training_steps
                 log_dict["lr"] = lr
                 log_dict["epoch"] = current_epoch
+                log_dict["bottleneck_loss_coefficient"] = bottleneck_loss_coefficient
                 #log_dict["mfu"] = mfu
 
                 # Log to terminal.

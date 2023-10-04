@@ -13,7 +13,7 @@ class DatasetConfig:
 
     # Token dropout settings.
     # Note: Copied verbatim from trainer.
-    token_dropout: bool = True  # Whether to use token dropout.
+    token_dropout: bool = False  # Whether to use token dropout.
     token_dropout_probability: float = 0.2
     token_dropout_encoder: bool = False  # Whether to use token dropout in the encoder.
     token_dropout_training: bool = True  # Whether to only use token dropout during training.
@@ -126,20 +126,14 @@ class Dataset:
                     ids_augmented.append(id)
             return ids_augmented
 
-        def apply_token_droupout_function(x):
-            if do_token_dropout_encoder:
-                x["encoder_ids"] = apply_token_dropout(x["encoder_ids"])
-            if do_token_dropout_decoder:
-                x["decoder_ids"] = apply_token_dropout(x["decoder_ids"])
-            return x
-
-        # Apply the token dropout function.
-        if do_token_dropout:
-            dataset = dataset.map(apply_token_droupout_function, num_proc=self.config.number_of_processes) 
-
         # Map into batches.
         def group_batch(batch):
-            return {k: [v] for k, v in batch.items()}
+            if do_token_dropout_encoder:
+                batch["encoder_ids"] = [apply_token_dropout(ids) for ids in batch["encoder_ids"]]
+            if do_token_dropout_decoder:
+                batch["decoder_ids"] = [apply_token_dropout(ids) for ids in batch["decoder_ids"]]
+            batch = {k: [v] for k, v in batch.items()}
+            return batch
         dataset = dataset.map(group_batch, batched=True, batch_size=batch_size, num_proc=self.config.number_of_processes)
 
         # Yield each batch.
