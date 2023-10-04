@@ -267,8 +267,8 @@ class Trainer:
 
         # The bottleneck loss coefficient scheduler.
         def get_bottleneck_loss_coefficient(iteration):
-            if bottleneck_loss_coefficient == bottleneck_loss_coefficient_max:
-                return bottleneck_loss_coefficient_max
+            if self.config.bottleneck_loss_coefficient == self.config.bottleneck_loss_coefficient_max:
+                return self.config.bottleneck_loss_coefficient_max
             factor = min(1.0, iteration / self.config.bottleneck_loss_iterations)
             return self.config.bottleneck_loss_coefficient * (1.0 - factor) + self.config.bottleneck_loss_coefficient_max * factor
 
