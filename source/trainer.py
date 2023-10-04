@@ -267,10 +267,10 @@ class Trainer:
 
         # The bottleneck loss coefficient scheduler.
         def get_bottleneck_loss_coefficient(iteration):
-            if iteration < self.config.bottleneck_loss_iterations:
-                return self.config.bottleneck_loss_coefficient_max * iteration / self.config.bottleneck_loss_iterations
-            else:
-                return self.config.bottleneck_loss_coefficient_max
+            if bottleneck_loss_coefficient == bottleneck_loss_coefficient_max:
+                return bottleneck_loss_coefficient_max
+            factor = min(1.0, iteration / self.config.bottleneck_loss_iterations)
+            return self.config.bottleneck_loss_coefficient * (1.0 - factor) + self.config.bottleneck_loss_coefficient_max * factor
 
         # logging
         if self.config.wandb_log:# and master_process: #TODO
@@ -380,7 +380,6 @@ class Trainer:
                 del loss
                 del reconstruction_loss
                 del bottleneck_loss
-            del batch_train
 
             # Increment the total training steps.
             total_training_steps += 1
