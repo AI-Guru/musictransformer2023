@@ -26,6 +26,13 @@ def peprocess(
     mode="generation" # "modeling"
     ):
 
+    # Print the parameters.
+    print("Parameters:")
+    print(f"dataset_id: {dataset_id}")
+    print(f"output_path: {output_path}")
+    print(f"padding_length: {padding_length}")
+    print(f"mode: {mode}")
+
     # Create the output path.
     output_path = os.path.join(output_path, mode)
     os.makedirs(output_path, exist_ok=True)
@@ -37,15 +44,19 @@ def peprocess(
     # Load the dataset.
     print(f"Loading dataset {dataset_id}...")
     split_dataset = load_dataset(dataset_id)
-    split_dataset["val"] = split_dataset.pop("test")
+    if "test" in split_dataset.keys():
+        split_dataset["val"] = split_dataset.pop("test")
+    if "validate" in split_dataset.keys():
+        split_dataset["val"] = split_dataset.pop("validate")
     for split in split_dataset.keys():
-        print(f"{split}: {split_dataset[split].num_rows} rows")
+        print(f"{split}: {split_dataset[split].num_rows:,} rows")
 
     # Check if we can work with this dataset.
     required_keys = ["train", "val"]
     for required_key in required_keys:
         if required_key not in split_dataset.keys():
-            print(f"Error: {required_key} not in split_dataset.keys()")
+            print(f"Error: {required_key} not in split_dataset.keys() {split_dataset.keys()}")
+            exit(0)
 
     # Get the vocabulary from the dataset. Use a counter and iterate over the dataset.
     # This is not the most efficient way to do this, but it works.
@@ -87,6 +98,23 @@ def peprocess(
     print(f"Text: {text}", file=overview_file)
     encoded_text = encode_text(text)
     print(f"Encoded text: {encoded_text}", file=overview_file)
+
+    # Go through the dataset and get the minimun and maximum length. Also get the mean and std.
+    print("Getting the length statistics...")
+    lengths = []
+    for split in split_dataset.keys():
+        for row in tqdm(split_dataset[split]):
+            lengths.append(len(row["text"].split(" ")))
+    print(f"Min length: {np.min(lengths)}", file=overview_file)
+    print(f"Max length: {np.max(lengths)}", file=overview_file)
+    print(f"Mean length: {np.mean(lengths)}", file=overview_file)
+    print(f"Std length: {np.std(lengths)}", file=overview_file)
+    plt.hist(lengths, bins=100)
+    plt.savefig(os.path.join(output_path, "lengths_distribution.png"))
+
+    if padding_length < np.max(lengths):
+        print(f"Error: padding_length {padding_length} is smaller than max length {np.max(lengths)}")
+        exit(0)
 
     # Now we want to tokenize the dataset.
     def process(example):
@@ -130,7 +158,7 @@ def peprocess(
         process,
         remove_columns=['text'],
         desc="tokenizing the splits",
-        #num_proc=num_proc,
+        num_proc=num_proc,
     )
 
     # Print a sample.
@@ -139,25 +167,26 @@ def peprocess(
     print(f"decoder_ids: {tokenized['train'][0]['decoder_ids']}", file=overview_file)
     print(f"target_ids:  {tokenized['train'][0]['target_ids']}", file=overview_file)
 
-    # Create a histogram of the lengths.
-    lengths = [row["length"] for row in tokenized["train"]]
-    plt.hist(lengths, bins=100)
-    plt.savefig(os.path.join(output_path, "lengths_distribution.png"))
-
-    # Write the information to the overview file.
-    print(f"Min length: {np.min(lengths)}", file=overview_file)
-    print(f"Max length: {np.max(lengths)}", file=overview_file)
-    print(f"Mean length: {np.mean(lengths)}", file=overview_file)
-    print(f"Std length: {np.std(lengths)}", file=overview_file)
+    # Save the dataset to disk.
+    print("Saving the dataset...")
+    tokenized.save_to_disk(output_path)
 
     # Save the dataset as JSONL files. One for each split.
-    print("Saving the dataset...")
-    for split in tokenized.keys():
-        split_file_path = os.path.join(output_path, f"{split}.jsonl")
-        with open(split_file_path, "w") as split_file:
-            for row in tqdm(tokenized[split]):
-                json.dump(row, split_file)
-                split_file.write("\n")
+    #print("Saving the dataset...")
+    #for split in tokenized.keys():
+    #    split_file_path = os.path.join(output_path, f"{split}.jsonl")
+    #    with open(split_file_path, "w") as split_file:
+    #        for row in tqdm(tokenized[split]):
+    #            json.dump(row, split_file)
+    #            split_file.write("\n")
+
+    # Close the overview file.
+    overview_file.close()
+
+    # Print the overview file.
+    print("Overview file:")
+    print(open(overview_file_path, "r").read())
+
 
 
 if __name__ == "__main__":

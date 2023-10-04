@@ -13,6 +13,7 @@ def test_dataset():
     # Create the dataset config and dataset.
     dataset_config = DatasetConfig(
         dataset_path = "data/jsfakes4bars/generation",
+        #dataset_path = "data/lakhclean_mmmtrack_1bars_vae/generation",
         token_dropout_mask_token = 666# "[TDR]"
     )
     dataset = Dataset(

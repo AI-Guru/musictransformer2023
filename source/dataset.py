@@ -2,7 +2,7 @@ import os
 from dataclasses import dataclass
 from typing import Union
 import datasets
-from datasets import load_dataset
+from datasets import load_dataset, load_from_disk
 import torch
 import numpy as np
 
@@ -54,12 +54,16 @@ class Dataset:
         # Load the datasets.
         assert os.path.exists(config.dataset_path), f"Error: {config.dataset_path} does not exist."
         self.dataset_path = config.dataset_path
-        train_dataset_path = os.path.join(config.dataset_path, "train.jsonl")
-        validate_dataset_path = os.path.join(config.dataset_path, "val.jsonl")
-        self.dataset_train = load_dataset("json", data_files=train_dataset_path, split="train")
-        self.dataset_validate = load_dataset("json", data_files=validate_dataset_path, split="train")
-        assert type(self.dataset_train) == datasets.arrow_dataset.Dataset, f"Error: {train_dataset_path} is not a valid dataset. Got {type(self.dataset_train)}."
-        assert type(self.dataset_validate) == datasets.arrow_dataset.Dataset, f"Error: {validate_dataset_path} is not a valid dataset. Got {type(self.dataset_validate)}."
+
+        # The dataset exists as a HF dataset on the HD.
+        print(f"Load dataset {config.dataset_path}...")
+        dataset = load_from_disk(config.dataset_path)
+        dataset_train = dataset["train"]
+        dataset_validate = dataset["val"]
+        assert type(dataset_train) == datasets.arrow_dataset.Dataset, f"Error: {dataset_train} is not a valid dataset. Got {type(dataset_train)}."
+        assert type(dataset_validate) == datasets.arrow_dataset.Dataset, f"Error: {dataset_validate} is not a valid dataset. Got {type(dataset_validate)}."
+        self.dataset_train = dataset_train
+        self.dataset_validate = dataset_validate
         
         # Load the vocabulary.
         vocabulary_path = os.path.join(config.dataset_path, "vocabulary.txt")
@@ -127,6 +131,7 @@ class Dataset:
             return ids_augmented
 
         # Map into batches.
+        print(f"Map into batches...")
         def group_batch(batch):
             if do_token_dropout_encoder:
                 batch["encoder_ids"] = [apply_token_dropout(ids) for ids in batch["encoder_ids"]]
@@ -135,6 +140,9 @@ class Dataset:
             batch = {k: [v] for k, v in batch.items()}
             return batch
         dataset = dataset.map(group_batch, batched=True, batch_size=batch_size, num_proc=self.config.number_of_processes)
+
+        # Print the sizes of the split.
+        print(f"Split {split} has {len(dataset)} batches.")
 
         # Yield each batch.
         for batch in dataset:

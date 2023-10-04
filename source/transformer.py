@@ -52,7 +52,6 @@ class Transformer(nn.Module):
             drop = nn.Dropout(config.dropout),
             h = nn.ModuleList([EncoderBlock(config) for _ in range(config.n_layer)]),
             ln_f = LayerNorm(config.n_embd, bias=config.bias),
-            # TODO Here would be a good place to add the bottleneck.
         ))
 
         # The decoder part.
