@@ -5,6 +5,8 @@ import datasets
 from datasets import load_dataset, load_from_disk
 import torch
 import numpy as np
+from torch.utils.data import DataLoader
+
 
 @dataclass
 class DatasetConfig:
@@ -12,7 +14,6 @@ class DatasetConfig:
     number_of_processes: Union[str, int] = "auto"
 
     # Token dropout settings.
-    # Note: Copied verbatim from trainer.
     token_dropout: bool = False  # Whether to use token dropout.
     token_dropout_probability: float = 0.2
     token_dropout_encoder: bool = False  # Whether to use token dropout in the encoder.
@@ -74,6 +75,12 @@ class Dataset:
         self.device = None
         self.device_type = None
 
+        self.data_loaders = {
+            "train": None,
+            "validate": None
+        }
+
+
     def set_device(self, device:str, device_type:str):
         self.device = device
         self.device_type = device_type
@@ -87,7 +94,39 @@ class Dataset:
         return description
 
     def iterate(self, split:str, shuffle:bool, batch_size:int):
-        
+
+        # Get the data loader.
+        data_loader = self.get_data_loader(split, shuffle, batch_size)
+
+        # Yield each batch.
+        for batch in data_loader:
+
+            # Get the data.
+            encoder_ids = batch[0]
+            decoder_ids = batch[1]
+            target_ids = batch[2]
+
+            # Move the data to the GPU.
+            if self.device_type == "cuda":
+                encoder_ids = encoder_ids.pin_memory().to(self.device, non_blocking=True)
+                decoder_ids = decoder_ids.pin_memory().to(self.device, non_blocking=True)
+                target_ids = target_ids.pin_memory().to(self.device, non_blocking=True)
+            else:
+                encoder_ids = encoder_ids.to(self.device)
+                decoder_ids = decoder_ids.to(self.device)
+                target_ids = target_ids.to(self.device)
+
+            # Yield the data.
+            yield encoder_ids, decoder_ids, target_ids
+
+
+    def get_data_loader(self, split:str, shuffle:bool, batch_size:int):
+
+        # Get the data loader and return it if it already exists.
+        if self.data_loaders[split] is not None:
+            data_loader = self.data_loaders[split]
+            return data_loader
+
         # Get the dataset.
         if split == "train":
             dataset = self.dataset_train
@@ -96,9 +135,6 @@ class Dataset:
         else:
             raise Exception(f"Error: Unknown split {split}.")
         assert type(dataset) == datasets.arrow_dataset.Dataset, f"Error: {dataset} is not a valid dataset. Got {type(dataset)}."
-
-        # Shuffle if necessary.
-        dataset = dataset.shuffle() if shuffle else dataset
 
         # Determine if we should do token dropout.
         do_token_dropout = False
@@ -130,40 +166,49 @@ class Dataset:
                     ids_augmented.append(id)
             return ids_augmented
 
-        # Map into batches.
-        print(f"Map into batches...")
-        def group_batch(batch):
-            if do_token_dropout_encoder:
-                batch["encoder_ids"] = [apply_token_dropout(ids) for ids in batch["encoder_ids"]]
-            if do_token_dropout_decoder:
-                batch["decoder_ids"] = [apply_token_dropout(ids) for ids in batch["decoder_ids"]]
-            batch = {k: [v] for k, v in batch.items()}
-            return batch
-        dataset = dataset.map(group_batch, batched=True, batch_size=batch_size, num_proc=self.config.number_of_processes)
+        # Define the collate function.
+        def collate_fn(batch):
 
-        # Print the sizes of the split.
-        print(f"Split {split} has {len(dataset)} batches.")
+            # Create the lists.
+            encoder_ids = []
+            decoder_ids = []
+            target_ids = []
 
-        # Yield each batch.
-        for batch in dataset:
-            encoder_ids = batch["encoder_ids"]
-            decoder_ids = batch["decoder_ids"]
-            target_ids = batch["target_ids"]
+            # Iterate over the batch.
+            for item in batch:
+                    
+                # Get the data.
+                encoder_ids.append(torch.tensor(item["encoder_ids"]))
+                decoder_ids.append(torch.tensor(item["decoder_ids"]))
+                target_ids.append(torch.tensor(item["target_ids"]))
 
-            # Convert to torch tensors.
-            encoder_ids = torch.tensor(encoder_ids).long()
-            decoder_ids = torch.tensor(decoder_ids).long()
-            target_ids = torch.tensor(target_ids).long()
+                # Apply token dropout.
+                if do_token_dropout_encoder:
+                    encoder_ids[-1] = apply_token_dropout(encoder_ids[-1])
+                if do_token_dropout_decoder:
+                    decoder_ids[-1] = apply_token_dropout(decoder_ids[-1])
 
-            # Move the data to the GPU.
-            if self.device_type == "cuda":
-                encoder_ids = encoder_ids.pin_memory().to(self.device, non_blocking=True)
-                decoder_ids = decoder_ids.pin_memory().to(self.device, non_blocking=True)
-                target_ids = target_ids.pin_memory().to(self.device, non_blocking=True)
-            else:
-                encoder_ids = encoder_ids.to(self.device)
-                decoder_ids = decoder_ids.to(self.device)
-                target_ids = target_ids.to(self.device)
+            # Stack everything.
+            encoder_ids = torch.stack(encoder_ids, dim=0).long()
+            decoder_ids = torch.stack(decoder_ids, dim=0).long()
+            target_ids = torch.stack(target_ids, dim=0).long()
 
-            # Yield the data.
-            yield encoder_ids, decoder_ids, target_ids
+            # Return.
+            return encoder_ids, decoder_ids, target_ids
+
+        # Create a data loader.
+        print(f"Create a data loader for split {split}...")
+        data_loader = DataLoader(
+            dataset,
+            batch_size=batch_size,
+            collate_fn=collate_fn,
+            shuffle=True if split == "train" else False,
+            num_workers=self.config.number_of_processes,
+            pin_memory=True,
+            drop_last=True,
+        )
+
+        self.data_loaders[split] = data_loader
+        return data_loader
+
+        

@@ -22,7 +22,7 @@ def test_dataset():
     print(dataset)
 
     # Get the first batch.
-    batch = next(dataset.iterate("train", shuffle=False, batch_size=1))
+    batch = next(dataset.iterate("train", shuffle=False, batch_size=2))
     encoder_ids, decoder_ids, target_ids = batch
     print(f"encoder_ids: {encoder_ids.shape}")
     print(f"encoder_ids: {encoder_ids.numpy().tolist()}")

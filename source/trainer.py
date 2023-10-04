@@ -251,29 +251,6 @@ class Trainer:
         #    assert False, "Error: DDP is not implemented yet."
         #    model = DDP(model, device_ids=[ddp_local_rank])
 
-        # helps estimate an arbitrarily accurate loss over either split using many batches
-        @torch.no_grad()
-        def estimate_loss():
-            out = {}
-            model.eval()
-            for split in ['train', 'val']:
-                losses = torch.zeros(self.config.eval_iters)
-                reconstruction_losses = torch.zeros(self.config.eval_iters)
-                bottleneck_losses = torch.zeros(self.config.eval_iters)
-                for k in range(self.config.eval_iters):
-                    encoder_ids, decoder_ids, target_ids = get_batch(split)
-                    with ctx:
-                        logits, reconstruction_loss, bottleneck_loss = model(encoder_ids, decoder_ids, target_ids)
-                    loss = reconstruction_loss + bottleneck_loss_coefficient * bottleneck_loss
-                    losses[k] = loss.item()
-                    reconstruction_losses[k] = reconstruction_loss.item()
-                    bottleneck_losses[k] = bottleneck_loss.item()
-                out[split] = losses.mean()
-                out[f"{split}_reconstruction"] = reconstruction_losses.mean()
-                out[f"{split}_bottleneck"] = bottleneck_losses.mean()
-            model.train()
-            return out
-
         # learning rate decay scheduler (cosine with warmup)
         def get_learning_rate(iteration):
             # 1) linear warmup for warmup_iters steps
@@ -294,7 +271,6 @@ class Trainer:
                 return self.config.bottleneck_loss_coefficient_max * iteration / self.config.bottleneck_loss_iterations
             else:
                 return self.config.bottleneck_loss_coefficient_max
-            
 
         # logging
         if self.config.wandb_log:# and master_process: #TODO
@@ -397,6 +373,15 @@ class Trainer:
                 # Flush the gradients as soon as we can, no need for this memory anymore.
                 optimizer.zero_grad(set_to_none=True)
 
+                # Delete other variables to free up memory.
+                del encoder_ids_train
+                del decoder_ids_train
+                del target_ids_train
+                del loss
+                del reconstruction_loss
+                del bottleneck_loss
+            del batch_train
+
             # Increment the total training steps.
             total_training_steps += 1
             epoch_training_steps += 1
@@ -409,19 +394,45 @@ class Trainer:
             elif self.config.eval_mode == "steps" and total_training_steps % self.config.eval_every == 0:
                 do_validate = True
             if do_validate:
+
+                # Let us try emptying the cache here.
+                torch.cuda.empty_cache()
+
                 print(f"Validate at epoch {current_epoch} step {total_training_steps}...")
                 model.eval()
+                validation_steps = 0
                 for encoder_ids_validate, decoder_ids_validate, target_ids_validate in dataset.iterate(split="validate", shuffle=False, batch_size=self.config.batch_size):
+                    print(f"Validation step {validation_steps}", end="\r")
+                    validation_steps += 1
+                    
                     # Forward pass and get the losses.
                     _, reconstruction_loss, bottleneck_loss = model(encoder_ids_validate, decoder_ids_validate, target_ids_validate)
 
-                    loss = reconstruction_loss + bottleneck_loss_coefficient * bottleneck_loss
-
                     # Update epoch loss.
+                    loss = reconstruction_loss + bottleneck_loss_coefficient * bottleneck_loss
                     losses_dict["val/loss"].append(loss.item())
                     losses_dict["val/reconstruction"].append(reconstruction_loss.item())
                     losses_dict["val/bottleneck"].append(bottleneck_loss.item())
+
+                    # Free memory.
+                    #del encoder_ids_validate
+                    #del decoder_ids_validate
+                    #del target_ids_validate
+                    #del loss
+                    #del reconstruction_loss
+                    #del bottleneck_loss
+                    
+                print("")
+                torch.cuda.empty_cache()
                 model.train()
+
+                # Evaluation is done. Delete the variables to free up memory.
+                #del encoder_ids_validate
+                #del decoder_ids_validate
+                #del target_ids_validate
+                #del loss
+                #del reconstruction_loss
+                #del bottleneck_loss
 
                 # Save the best model.
                 if self.config.save_best:

@@ -18,6 +18,7 @@ def train():
 
     # Create the training config.
     trainer_config = TrainerConfig(
+        out_dir=f"output/jsfakes4bars/transformer_{timestamp}",
         device="auto"
     )
 

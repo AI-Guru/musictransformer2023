@@ -19,8 +19,8 @@ def train():
     # Create the Training config.
     trainer_config = TrainerConfig(
         out_dir=f"output/lakhclean/transformer_{timestamp}",
-        batch_size=160,
-        num_epochs=1,
+        batch_size=96,
+        num_epochs=2,
         device="auto",
         
         # Bottleneck config.
@@ -33,15 +33,15 @@ def train():
         wandb_run_name=f"transformer_{timestamp}",
         
         # When to evaluate.
-        eval_every=500,
+        eval_every=1000,
         eval_mode="steps",
 
         # When to log.
-        log_every=500,
+        log_every=1000,
         log_mode="steps",
 
         # When to save.
-        save_every=500,
+        save_every=1000,
         save_mode= "steps",
     )
 
