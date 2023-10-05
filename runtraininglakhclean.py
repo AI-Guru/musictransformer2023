@@ -18,15 +18,31 @@ def train():
 
     # Create the Training config.
     trainer_config = TrainerConfig(
+
+        # General settings.
         out_dir=f"output/lakhclean/transformer_{timestamp}",
         batch_size=96,
-        num_epochs=2,
+        num_epochs=5,
         device="auto",
         
         # Bottleneck config.
         bottleneck_loss_coefficient=1.0,
         bottleneck_loss_coefficient_max=1.0,
         
+        # Optimizer settings.
+        learning_rate=6e-4, # Max learning rate.
+        max_iters=75_000,   # Total number of training iterations.
+        weight_decay=1e-1,  # Weight decay.
+        beta1=0.9,          # Beta1 for Adam.
+        beta2=0.95,         # Beta2 for Adam.
+        grad_clip=1.0,      # Clip gradients at this value, or disable if == 0.0.
+
+        # Learning rate decay settings.
+        decay_lr=True,          # Whether to decay the learning rate.
+        warmup_iters=5_000,     # How many steps to warm up for.
+        lr_decay_iters=75_000,  # Should be ~= max_iters per Chinchilla.
+        min_lr=6e-5,            # Minimum learning rate, should be ~= learning_rate/10 per Chinchilla.
+
         # Wandb config.
         wandb_log=True,
         wandb_project="transformer-vae-lakhclean",
@@ -69,7 +85,7 @@ def train():
         bias = False,
         block_size = 786,
         bottleneck = "variational", # "simple" or "variational" or "none"
-        bottleneck_depth = 5
+        bottleneck_depth = 4
     )
 
     # Create the model.
