@@ -37,9 +37,9 @@ def test_simple_bottleneck():
 def test_variational_bottleneck():
 
     # Create the bottleneck.
-    block_size = 384
-    n_embd = 128
-    depth = 5
+    block_size = 256
+    n_embd = 8
+    depth = 2
     bottleneck = VariationalBottleneck(block_size, n_embd, depth)
     print(f"bottleneck: {bottleneck}")
     print("")
@@ -63,6 +63,15 @@ def test_variational_bottleneck():
     y = bottleneck.decode(z)
     print(f"y.shape: {y.shape} ({np.prod(y.shape)} numbers)")
     print("")
+
+    # Test the forward pass with passing mask.
+    padding_mask = torch.ones(1, block_size, dtype=torch.float32)
+    padding_mask[:, 64:] = 0
+    print(f"padding_mask.shape: {padding_mask.shape} ({np.prod(padding_mask.shape)} numbers)")
+    print(f"padding_mask: {padding_mask}")
+    y, loss = bottleneck(x, return_loss=True, padding_mask=padding_mask)
+    print(f"y.shape: {y.shape} ({np.prod(y.shape)} numbers)")
+    print(f"loss: {loss}")
 
     # Assert the shapes are the same.
     assert y.shape == x.shape

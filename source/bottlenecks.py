@@ -45,6 +45,7 @@ class SimpleBottleneck(nn.Module):
 
 
 class VariationalBottleneck(nn.Module):
+
     def __init__(self, block_size, n_embd, depth):
         super(VariationalBottleneck, self).__init__()
 
@@ -63,6 +64,17 @@ class VariationalBottleneck(nn.Module):
                 nn.ReLU()
             ])
         self.encoder_layers = nn.Sequential(*encoder_layers)
+
+        # Masking layer. This is used to mask out the latent space.
+        masking_layers = []
+        for i in range(depth + 1):
+            in_channels = 1
+            out_channels = 1
+            conv_layer = nn.Conv1d(in_channels, out_channels, kernel_size=5, stride=2, padding=2, padding_mode="replicate", bias=False)
+            conv_layer.weight.data = torch.ones_like(conv_layer.weight.data) / 5
+            conv_layer.weight.requires_grad = False
+            masking_layers.append(conv_layer)
+        self.masking_layers = nn.Sequential(*masking_layers)
 
         # Produce mean and log variance for the latent space
         self.fc_mu = nn.Conv1d(n_embd // (2 ** depth), n_embd // (2 ** (depth + 1)), kernel_size=5, stride=2, padding=2)
@@ -86,14 +98,28 @@ class VariationalBottleneck(nn.Module):
         eps = torch.randn_like(std)
         return mu + eps * std
     
-    def forward(self, x, return_loss=False):
+    def forward(self, x, return_loss=False, padding_mask=None):
         mu, logvar = self.encode(x)
         z = self.reparameterize(mu, logvar)
         x_recon = self.decode(z)
 
-        # Only return the KL loss.
+        # Mask out the latent space.
+        padding_mask_latent = None
+        if padding_mask is not None:
+            padding_mask_latent = self.masking_layers(padding_mask)
+            print(f"padding_mask_latent.shape: {padding_mask_latent.shape}")
+            print(f"padding_mask_latent: {padding_mask_latent}")
+
+        # Return the loss.
         if return_loss:
-            kl_loss = -0.5 * torch.sum(1 + logvar - mu.pow(2) - logvar.exp())
+            # No padding mask.
+            if padding_mask_latent is None:
+                kl_loss = -0.5 * torch.sum(1 + logvar - mu.pow(2) - logvar.exp())
+            # Padding mask.
+            else:
+                kl_loss = -0.5 * (1 + logvar - mu.pow(2) - logvar.exp())
+                kl_loss = kl_loss * padding_mask_latent
+                kl_loss = torch.sum(kl_loss)
             return x_recon, kl_loss
 
         return x_recon
