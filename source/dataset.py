@@ -105,19 +105,22 @@ class Dataset:
             encoder_ids = batch[0]
             decoder_ids = batch[1]
             target_ids = batch[2]
+            padding_masks = batch[3]
 
             # Move the data to the GPU.
             if self.device_type == "cuda":
                 encoder_ids = encoder_ids.pin_memory().to(self.device, non_blocking=True)
                 decoder_ids = decoder_ids.pin_memory().to(self.device, non_blocking=True)
                 target_ids = target_ids.pin_memory().to(self.device, non_blocking=True)
+                padding_masks = padding_masks.pin_memory().to(self.device, non_blocking=True)
             else:
                 encoder_ids = encoder_ids.to(self.device)
                 decoder_ids = decoder_ids.to(self.device)
                 target_ids = target_ids.to(self.device)
+                padding_masks = padding_masks.to(self.device)
 
             # Yield the data.
-            yield encoder_ids, decoder_ids, target_ids
+            yield encoder_ids, decoder_ids, target_ids, padding_masks
 
 
     def get_data_loader(self, split:str, shuffle:bool, batch_size:int):
@@ -173,14 +176,16 @@ class Dataset:
             encoder_ids = []
             decoder_ids = []
             target_ids = []
+            padding_masks = []
 
             # Iterate over the batch.
             for item in batch:
-                    
+
                 # Get the data.
                 encoder_ids.append(torch.tensor(item["encoder_ids"]))
                 decoder_ids.append(torch.tensor(item["decoder_ids"]))
                 target_ids.append(torch.tensor(item["target_ids"]))
+                padding_masks.append(torch.tensor(item["padding_mask"]))
 
                 # Apply token dropout.
                 if do_token_dropout_encoder:
@@ -192,9 +197,10 @@ class Dataset:
             encoder_ids = torch.stack(encoder_ids, dim=0).long()
             decoder_ids = torch.stack(decoder_ids, dim=0).long()
             target_ids = torch.stack(target_ids, dim=0).long()
+            padding_masks = torch.stack(padding_masks, dim=0).bool()
 
             # Return.
-            return encoder_ids, decoder_ids, target_ids
+            return encoder_ids, decoder_ids, target_ids, padding_masks
 
         # Create a data loader.
         print(f"Create a data loader for split {split}...")

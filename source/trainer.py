@@ -339,7 +339,7 @@ class Trainer:
                 print(f"Epoch {current_epoch} step {total_training_steps}", end="\r")
 
                 # Unpack the batch.
-                encoder_ids_train, decoder_ids_train, target_ids_train = batch_train
+                encoder_ids_train, decoder_ids_train, target_ids_train, padding_masks_train = batch_train
 
                 # Get the learning rate.
                 lr = get_learning_rate(total_training_steps) if self.config.decay_lr else self.config.learning_rate
@@ -350,7 +350,12 @@ class Trainer:
                 bottleneck_loss_coefficient = get_bottleneck_loss_coefficient(total_training_steps)
 
                 # Forward pass and get the loss.
-                _, reconstruction_loss, bottleneck_loss = model(encoder_ids_train, decoder_ids_train, target_ids_train)
+                _, reconstruction_loss, bottleneck_loss = model(
+                    encoder_ids_train,
+                    decoder_ids_train,
+                    target_ids=target_ids_train,
+                    padding_masks=padding_masks_train,
+                )
                 loss = reconstruction_loss + bottleneck_loss_coefficient * bottleneck_loss
 
                 # Update epoch loss.
@@ -400,12 +405,17 @@ class Trainer:
                 print(f"Validate at epoch {current_epoch} step {total_training_steps}...")
                 model.eval()
                 validation_steps = 0
-                for encoder_ids_validate, decoder_ids_validate, target_ids_validate in dataset.iterate(split="validate", shuffle=False, batch_size=self.config.batch_size):
+                for encoder_ids_validate, decoder_ids_validate, target_ids_validate, padding_masks_validate in dataset.iterate(split="validate", shuffle=False, batch_size=self.config.batch_size):
                     print(f"Validation step {validation_steps}", end="\r")
                     validation_steps += 1
                     
                     # Forward pass and get the losses.
-                    _, reconstruction_loss, bottleneck_loss = model(encoder_ids_validate, decoder_ids_validate, target_ids_validate)
+                    _, reconstruction_loss, bottleneck_loss = model(
+                        encoder_ids=encoder_ids_validate, 
+                        decoder_ids=decoder_ids_validate,
+                        target_ids=target_ids_validate,
+                        padding_masks=padding_masks_validate,    
+                    )
 
                     # Update epoch loss.
                     loss = reconstruction_loss + bottleneck_loss_coefficient * bottleneck_loss

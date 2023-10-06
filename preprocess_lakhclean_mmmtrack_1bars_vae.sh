@@ -1,1 +1,1 @@
-python source/preprocess.py TristanBehrens/lakhclean_mmmtrack_1bars_vae data/lakhclean_mmmtrack_1bars_vae 768
+python source/preprocess.py TristanBehrens/lakhclean_mmmtrack_1bars_vae data/lakhclean_mmmtrack_1bars_vae 512

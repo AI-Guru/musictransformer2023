@@ -112,9 +112,9 @@ def peprocess(
     plt.hist(lengths, bins=100)
     plt.savefig(os.path.join(output_path, "lengths_distribution.png"))
 
-    if padding_length < np.max(lengths):
-        print(f"Error: padding_length {padding_length} is smaller than max length {np.max(lengths)}")
-        exit(0)
+    #if padding_length < np.max(lengths):
+    #    print(f"Error: padding_length {padding_length} is smaller than max length {np.max(lengths)}")
+    #    exit(0)
 
     # Now we want to tokenize the dataset.
     def process(example):
@@ -127,28 +127,43 @@ def peprocess(
             encoder_ids = text_ids
             decoder_ids = [encode_token("[SOS]")] + text_ids
             target_ids = text_ids + [encode_token("[EOS]")]
+            padding_mask = [1] * len(text_ids)
         elif mode == "generation":
             encoder_ids = text_ids
             decoder_ids = text_ids
             target_ids = text_ids[1:] + [encode_token("[EOS]")]
+            padding_mask = [1] * len(text_ids)
 
         # Raise an exception if any of the sequences is longer than the padding length.
         if len(encoder_ids) > padding_length:
-            raise Exception(f"Encoder sequence too long! It has length {len(encoder_ids)}")
+            encoder_ids = encoder_ids[:padding_length]
+            #raise Exception(f"Encoder sequence too long! It has length {len(encoder_ids)}")
         if len(decoder_ids) > padding_length:
-            raise Exception(f"Decoder sequence too long! It has length {len(decoder_ids)}")
+            decoder_ids = decoder_ids[:padding_length]
+            #raise Exception(f"Decoder sequence too long! It has length {len(decoder_ids)}")
         if len(target_ids) > padding_length:
-            raise Exception(f"Target sequence too long! It has length {len(target_ids)}")
+            target_ids = target_ids[:padding_length]
+            #raise Exception(f"Target sequence too long! It has length {len(target_ids)}")
+        if len(padding_mask) > padding_length:
+            padding_mask = padding_mask[:padding_length]
+            #raise Exception(f"Padding mask too long! It has length {len(padding_mask)}")
 
         # Pad the ids. Add padding token at the end.
         encoder_ids += [encode_token("[PAD]")] * (padding_length - len(encoder_ids))
         decoder_ids += [encode_token("[PAD]")] * (padding_length - len(decoder_ids))
         target_ids += [encode_token("[PAD]")] * (padding_length - len(target_ids))
+        padding_mask += [0] * (padding_length - len(padding_mask))
+
+        assert len(encoder_ids) == padding_length
+        assert len(decoder_ids) == padding_length
+        assert len(target_ids) == padding_length
+        assert len(padding_mask) == padding_length
 
         out = {
             "encoder_ids": encoder_ids,
             "decoder_ids": decoder_ids,
             "target_ids": target_ids,
+            "padding_mask": padding_mask,
             "length": len(text_ids),
         }   
         return out
@@ -166,6 +181,7 @@ def peprocess(
     print(f"encoder_ids: {tokenized['train'][0]['encoder_ids']}", file=overview_file)
     print(f"decoder_ids: {tokenized['train'][0]['decoder_ids']}", file=overview_file)
     print(f"target_ids:  {tokenized['train'][0]['target_ids']}", file=overview_file)
+    print(f"padding_mask: {tokenized['train'][0]['padding_mask']}", file=overview_file)
 
     # Save the dataset to disk.
     print("Saving the dataset...")
