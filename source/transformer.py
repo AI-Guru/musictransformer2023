@@ -115,7 +115,7 @@ class Transformer(nn.Module):
         elif isinstance(module, nn.Embedding):
             torch.nn.init.normal_(module.weight, mean=0.0, std=0.02)
 
-    def forward(self, encoder_ids, decoder_ids, target_ids=None, padding_masks=None):
+    def forward(self, encoder_ids, decoder_ids, target_ids=None, padding_mask=None):
         device = encoder_ids.device
         b, t = encoder_ids.size()
         assert t <= self.config.block_size, f"Cannot forward sequence of length {t}, block size is only {self.config.block_size}"
@@ -132,7 +132,11 @@ class Transformer(nn.Module):
         # Forward the bottleneck if it exists.
         bottleneck_loss = 0.0
         if self.bottleneck is not None:
-            x_encoder, bottleneck_loss = self.bottleneck(x_encoder, return_loss=True) 
+            x_encoder, bottleneck_loss = self.bottleneck(
+                x_encoder,
+                return_loss=True,
+                padding_mask=padding_mask,
+            ) 
             #bottleneck_loss = bottleneck_loss * self.config.bottleneck_loss_coef
 
         # Forward the decoder.
@@ -148,9 +152,9 @@ class Transformer(nn.Module):
             logits = self.lm_head(x_decoder)
             reconstruction_loss = F.cross_entropy(logits.view(-1, logits.size(-1)), target_ids.view(-1), ignore_index=-1)
             # Apply the padding mask.
-            if padding_masks is not None:
-                reconstruction_loss = reconstruction_loss * padding_masks.view(-1)
-                reconstruction_loss = reconstruction_loss.sum() / padding_masks.sum()
+            if padding_mask is not None:
+                reconstruction_loss = reconstruction_loss * padding_mask.view(-1)
+                reconstruction_loss = reconstruction_loss.sum() / padding_mask.sum()
             #loss = reconstruction_loss + bottleneck_loss
             return logits, reconstruction_loss, bottleneck_loss
         else:
