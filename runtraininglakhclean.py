@@ -30,7 +30,7 @@ def train():
         bottleneck_loss_coefficient_max=1.0,
         
         # Optimizer settings.
-        learning_rate=6e-5, # Max learning rate.
+        learning_rate=6e-4, # Max learning rate.
         max_iters=50_000,   # Total number of training iterations.
         weight_decay=1e-1,  # Weight decay.
         beta1=0.9,          # Beta1 for Adam.
@@ -41,7 +41,7 @@ def train():
         decay_lr=True,          # Whether to decay the learning rate.
         warmup_iters=1_000,     # How many steps to warm up for.
         lr_decay_iters=50_000,  # Should be ~= max_iters per Chinchilla.
-        min_lr=6e-6,            # Minimum learning rate, should be ~= learning_rate/10 per Chinchilla.
+        min_lr=6e-5,            # Minimum learning rate, should be ~= learning_rate/10 per Chinchilla.
 
         # Wandb config.
         wandb_log=True,
