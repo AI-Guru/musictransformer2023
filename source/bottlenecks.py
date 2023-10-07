@@ -99,7 +99,12 @@ class VariationalBottleneck(nn.Module):
         return mu + eps * std
     
     def forward(self, x, return_loss=False, padding_mask=None):
+
+        # Note: Shape is (batch_size, block_size, n_embd) as it comes from the transformer.
+
+        # Encode the input.
         mu, logvar = self.encode(x)
+
         z = self.reparameterize(mu, logvar)
         x_recon = self.decode(z)
 
@@ -107,21 +112,21 @@ class VariationalBottleneck(nn.Module):
         padding_mask_latent = None
         if padding_mask is not None:
             padding_mask_latent = self.masking_layers(padding_mask)
-            print(f"padding_mask_latent.shape: {padding_mask_latent.shape}")
-            print(f"padding_mask_latent: {padding_mask_latent}")
 
-        # Return the loss.
+        # Return the reconstruction and the loss.
         if return_loss:
-            # No padding mask.
-            if padding_mask_latent is None:
-                kl_loss = -0.5 * torch.sum(1 + logvar - mu.pow(2) - logvar.exp())
-            # Padding mask.
-            else:
-                kl_loss = -0.5 * (1 + logvar - mu.pow(2) - logvar.exp())
+            kl_loss = -0.5 * (1 + logvar - mu.pow(2) - logvar.exp())
+            #print(f"kl_loss.shape: {kl_loss.shape}")
+            if padding_mask_latent is not None:
+                #print(f"padding_mask_latent.shape: {padding_mask_latent.shape}")
+                #print(f"padding_mask_latent: {padding_mask_latent}")
                 kl_loss = kl_loss * padding_mask_latent
-                kl_loss = torch.sum(kl_loss)
+                #print(f"kl_loss.shape: {kl_loss.shape}")
+                #print(f"kl_loss: {kl_loss.detach().transpose(2, 1).numpy().tolist()}")
+            kl_loss = torch.sum(kl_loss)
             return x_recon, kl_loss
 
+        # Return the reconstruction.
         return x_recon
 
     def encode(self, x):

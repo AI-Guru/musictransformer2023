@@ -37,12 +37,10 @@ def test_simple_bottleneck():
 def test_variational_bottleneck():
 
     # Create the bottleneck.
-    block_size = 256
-    n_embd = 8
-    depth = 2
+    block_size = 512
+    n_embd = 128
+    depth = 4
     bottleneck = VariationalBottleneck(block_size, n_embd, depth)
-    print(f"bottleneck: {bottleneck}")
-    print("")
     
     # Create a random sample.
     x = torch.rand(1, block_size, n_embd)

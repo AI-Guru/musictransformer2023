@@ -130,7 +130,6 @@ class Transformer(nn.Module):
         x_encoder = self.encoder.ln_f(x_encoder)
         
         # Forward the bottleneck if it exists.
-        bottleneck_loss = 0.0
         if self.bottleneck is not None:
             x_encoder, bottleneck_loss = self.bottleneck(
                 x_encoder,
