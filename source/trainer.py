@@ -354,7 +354,7 @@ class Trainer:
                     encoder_ids_train,
                     decoder_ids_train,
                     target_ids=target_ids_train,
-                    padding_masks=padding_masks_train,
+                    padding_mask=padding_masks_train,
                 )
                 loss = reconstruction_loss + bottleneck_loss_coefficient * bottleneck_loss
 

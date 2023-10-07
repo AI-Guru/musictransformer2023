@@ -116,6 +116,10 @@ class Transformer(nn.Module):
             torch.nn.init.normal_(module.weight, mean=0.0, std=0.02)
 
     def forward(self, encoder_ids, decoder_ids, target_ids=None, padding_mask=None):
+
+        # padding mask should be float.
+        assert padding_mask is None or padding_mask.dtype == torch.float32, f"padding_mask.dtype is {padding_mask.dtype}"
+
         device = encoder_ids.device
         b, t = encoder_ids.size()
         assert t <= self.config.block_size, f"Cannot forward sequence of length {t}, block size is only {self.config.block_size}"

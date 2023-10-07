@@ -111,7 +111,9 @@ class VariationalBottleneck(nn.Module):
         # Mask out the latent space.
         padding_mask_latent = None
         if padding_mask is not None:
+            padding_mask = padding_mask.unsqueeze(1)
             padding_mask_latent = self.masking_layers(padding_mask)
+            #padding_mask_latent = padding_mask_latent.squeeze(1)
 
         # Return the reconstruction and the loss.
         if return_loss:

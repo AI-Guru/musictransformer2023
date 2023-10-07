@@ -24,7 +24,7 @@ def test():
     # x is a sequence of integers.
     sequence_length = transformer_config.block_size
     vocab_size = transformer_config.vocab_size
-    batch_size = 1
+    batch_size = 128
     encoder_ids = torch.randint(0, vocab_size, (batch_size, sequence_length))
     print(f"encoder_ids.shape: {encoder_ids.shape}")
     print(f"encoder_ids: {encoder_ids}")

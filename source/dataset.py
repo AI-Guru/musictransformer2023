@@ -197,7 +197,7 @@ class Dataset:
             encoder_ids = torch.stack(encoder_ids, dim=0).long()
             decoder_ids = torch.stack(decoder_ids, dim=0).long()
             target_ids = torch.stack(target_ids, dim=0).long()
-            padding_masks = torch.stack(padding_masks, dim=0).bool()
+            padding_masks = torch.stack(padding_masks, dim=0).float()
 
             # Return.
             return encoder_ids, decoder_ids, target_ids, padding_masks
