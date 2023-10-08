@@ -414,7 +414,7 @@ class Trainer:
                         encoder_ids=encoder_ids_validate, 
                         decoder_ids=decoder_ids_validate,
                         target_ids=target_ids_validate,
-                        padding_masks=padding_masks_validate,    
+                        padding_mask=padding_masks_validate,    
                     )
 
                     # Update epoch loss.
