@@ -190,7 +190,9 @@ class Trainer:
             epoch=None,
             checkpoint_name="test_checkpoint.pt",
         )
-        _ = Transformer.load(checkpoint_path)
+        # Get the class of the model.
+        model_class = model.__class__
+        _ = model_class.load(checkpoint_path)
         os.remove(checkpoint_path)
         print("Model can be saved and loaded.")
 
@@ -350,12 +352,21 @@ class Trainer:
                 bottleneck_loss_coefficient = get_bottleneck_loss_coefficient(total_training_steps)
 
                 # Forward pass and get the loss.
-                _, reconstruction_loss, bottleneck_loss = model(
-                    encoder_ids_train,
-                    decoder_ids_train,
-                    target_ids=target_ids_train,
-                    padding_mask=padding_masks_train,
-                )
+                if model.family == "encoderdecoder":
+                    _, reconstruction_loss, bottleneck_loss = model(
+                        encoder_ids_train,
+                        decoder_ids_train,
+                        target_ids=target_ids_train,
+                        padding_mask=padding_masks_train,
+                    )
+                elif model.family == "encoder":
+                    _, reconstruction_loss, bottleneck_loss = model(
+                        encoder_ids_train,
+                        target_ids=encoder_ids_train,
+                        padding_mask=padding_masks_train,
+                    )
+                else:
+                    raise Exception(f"Unknown model family: {model.family}")
                 loss = reconstruction_loss + bottleneck_loss_coefficient * bottleneck_loss
 
                 # Update epoch loss.
@@ -410,12 +421,21 @@ class Trainer:
                     validation_steps += 1
                     
                     # Forward pass and get the losses.
-                    _, reconstruction_loss, bottleneck_loss = model(
-                        encoder_ids=encoder_ids_validate, 
-                        decoder_ids=decoder_ids_validate,
-                        target_ids=target_ids_validate,
-                        padding_mask=padding_masks_validate,    
-                    )
+                    if model.family == "encoderdecoder":
+                        _, reconstruction_loss, bottleneck_loss = model(
+                            encoder_ids=encoder_ids_validate, 
+                            decoder_ids=decoder_ids_validate,
+                            target_ids=target_ids_validate,
+                            padding_mask=padding_masks_validate,    
+                        )
+                    elif model.family == "encoder":
+                        _, reconstruction_loss, bottleneck_loss = model(
+                            encoder_ids=encoder_ids_validate, 
+                            target_ids=encoder_ids_validate,
+                            padding_mask=padding_masks_validate,    
+                        )
+                    else:
+                        raise Exception(f"Unknown model family: {model.family}")
 
                     # Update epoch loss.
                     loss = reconstruction_loss + bottleneck_loss_coefficient * bottleneck_loss

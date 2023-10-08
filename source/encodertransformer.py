@@ -2,7 +2,7 @@ import math
 import inspect
 from dataclasses import dataclass, replace
 import os
-import json
+import numpy as np
 
 import torch
 import torch.nn as nn
@@ -13,7 +13,6 @@ sys.path.append("..")
 
 from source.layers import (
     EncoderBlock,
-    DecoderBlock,
     LayerNorm,
 )
 from source.bottlenecks import (
@@ -42,7 +41,12 @@ class EncoderTransformer(nn.Module):
         super().__init__()
         assert config.vocab_size is not None
         assert config.block_size is not None
+        
+        # Store the config.
         self.config = config
+
+        # Set the family.
+        self.family = "encoder"
 
         # Token an position embeddings.
         self.wte = nn.Embedding(config.vocab_size, config.n_embd)
@@ -412,10 +416,10 @@ class EncoderTransformer(nn.Module):
 
         # Load the config.
         model_config_dict = checkpoint["model_config"]
-        model_config = TransformerConfig(**model_config_dict)
+        model_config = EncoderTransformerConfig(**model_config_dict)
 
         # Create the model.
-        model = Transformer(model_config)
+        model = EncoderTransformer(model_config)
 
         # Get the keys of the state dict. Sort them and make a list.
         state_dict_keys = model.state_dict().keys()
@@ -444,6 +448,24 @@ class EncoderTransformer(nn.Module):
         # Return the model.
         return model
     
+    def get_block_size(self):
+        return self.config.block_size
+    
+    def get_vocab_size(self):
+        return self.config.vocab_size
+    
+    def get_embedding_size(self):
+        return self.config.n_embd
+
+    def get_compression_ratio(self):
+        principal_shape = self.get_principal_shape()
+        bottleneck_shape = self.get_bottleneck_shape()
+        return np.prod(bottleneck_shape) / np.prod(principal_shape)
+    
+    def get_principal_shape(self):
+        # Return the shape of the principal part of the model.
+        return (self.config.block_size, self.config.n_embd)
+
     def get_bottleneck_shape(self):
         # Raise an exception if there is no bottleneck.
         if self.bottleneck is None:

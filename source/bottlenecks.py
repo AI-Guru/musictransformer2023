@@ -143,6 +143,53 @@ class VariationalBottleneck(nn.Module):
         y = y.transpose(1, 2)
         return y
     
+    def get_shapes(self, print_friendlier=True, activations=False):
+
+        # Shapes of the encoder layers.
+        shapes = []
+
+        # A random vector of shape (batch_size, block_size, n_embd)
+        x = torch.randn((1, self.block_size, self.n_embd))
+        shapes += [("x", x.shape)]
+
+        # Encode the input. Use the encoder, layer by layer.
+        x = x.transpose(1, 2)
+        shapes += [("x transposed", x.shape)]
+        for layer in self.encoder_layers:
+            x = layer(x)
+            shapes += [(str(layer), x.shape)]
+
+        # Produce mean and log variance for the latent space
+        mu = self.fc_mu(x)
+        shapes += [("mu", mu.shape)]
+        logvar = self.fc_logvar(x)
+        shapes += [("logvar", logvar.shape)]
+
+        # Reparameterize
+        z = self.reparameterize(mu, logvar)
+        shapes += [("z", z.shape)]
+
+        # Decode the latent space. Use the decoder, layer by layer.
+        for layer in self.decoder_layers:
+            z = layer(z)
+            shapes += [(str(layer), z.shape)]
+        y = z.transpose(1, 2)
+        shapes += [("y", y.shape)]
+
+        # Filter out the activations.
+        if activations == False:
+            shapes = [shape for shape in shapes if not shape[0].startswith("ReLU")]
+
+        # If print friendlier, make sure that all the layer names have the same length - add spaces.
+        # Also map shapes to tuples.
+        if print_friendlier:
+            max_name_length = max([len(name) for name, shape in shapes])
+            shapes = [(name + " " * (max_name_length - len(name)), shape) for name, shape in shapes]
+            shapes = [(name, list(shape)) for name, shape in shapes]
+
+        return shapes
+
+    
     def get_shape(self):
         depth = len(self.encoder_layers) // 2  # since each layer is paired with a ReLU
         return (self.n_embd // (2 ** (depth + 1)), self.block_size // (2 ** depth))

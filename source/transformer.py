@@ -43,7 +43,12 @@ class Transformer(nn.Module):
         super().__init__()
         assert config.vocab_size is not None
         assert config.block_size is not None
+
+        # Store the config.
         self.config = config
+
+        # Set the family.
+        self.family = "encoderdecoder"
 
         # The encoder part.
         self.encoder = nn.ModuleDict(dict(
@@ -435,7 +440,6 @@ class Transformer(nn.Module):
         missing_keys = set(state_dict_keys).symmetric_difference(loaded_state_dict_keys)
         if len(missing_keys) > 0:
             raise Exception(f"Missing {len(missing_keys)} keys: {missing_keys}")
-        
 
         # Both lists should have the same length.
         assert len(state_dict_keys) == len(loaded_state_dict_keys), f"Length of state_dict_keys ({len(state_dict_keys)}) does not match length of loaded_state_dict_keys ({len(loaded_state_dict_keys)})"
