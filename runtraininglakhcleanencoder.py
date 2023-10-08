@@ -85,7 +85,7 @@ def train():
         bias = False,
         block_size = 512,
         bottleneck = "variational", # "simple" or "variational" or "none"
-        bottleneck_depth = 4
+        bottleneck_channels_list=[192, 256, 320],
     )
 
     # Create the model.
