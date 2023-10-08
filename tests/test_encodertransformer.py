@@ -14,7 +14,7 @@ def test():
     
     transformer_config = EncoderTransformerConfig(
         bottleneck="variational",
-        bottleneck_depth=5,
+        #bottleneck_depth=5,
     )
     print(transformer_config)
     transformer = EncoderTransformer(transformer_config)
@@ -48,15 +48,7 @@ def test():
     print(f"bottleneck_loss: {bottleneck_loss}")
     print("")
 
-    print("Block size:       ", transformer.get_block_size())
-    print("Vocab size:       ", transformer.get_vocab_size())
-    print("Embedding size:   ", transformer.get_embedding_size())
-    print("Principal shape:  ", transformer.get_principal_shape())
-    print("Bottleneck shape: ", transformer.get_bottleneck_shape()) 
-    print("Compression ratio:", transformer.get_compression_ratio())
-    shapes = transformer.bottleneck.get_shapes()
-    for name, shape in shapes:
-        print(f"{name}: {shape}")
+    print(transformer.summary())
 
 
 if __name__ == '__main__':

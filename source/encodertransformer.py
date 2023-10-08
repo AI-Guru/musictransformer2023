@@ -1,6 +1,7 @@
 import math
 import inspect
-from dataclasses import dataclass, replace
+from dataclasses import dataclass, field
+from typing import List
 import os
 import numpy as np
 
@@ -31,7 +32,7 @@ class EncoderTransformerConfig:
     dropout: float = 0.0
     bias: bool = True # True: bias in Linears and LayerNorms, like GPT-2. False: a bit better and faster
     bottleneck: str = "none"
-    bottleneck_depth: int = 4
+    bottleneck_channels_list: List[int] = field(default_factory=lambda: [192, 256, 320])
     flash_attention: bool = False
     
 
@@ -65,7 +66,7 @@ class EncoderTransformer(nn.Module):
         elif config.bottleneck == "simple":
             self.bottleneck = SimpleBottleneck(config.block_size, config.n_embd)
         elif config.bottleneck == "variational":
-            self.bottleneck = VariationalBottleneck(config.block_size, config.n_embd, config.bottleneck_depth)
+            self.bottleneck = VariationalBottleneck(config)
         else: 
             raise NotImplementedError(f"Bottleneck {config.bottleneck} not implemented yet.")
 
@@ -448,6 +449,23 @@ class EncoderTransformer(nn.Module):
         # Return the model.
         return model
     
+    def summary(self):
+        summary = ""
+        summary += f"Block size:        {self.get_block_size()}\n" 
+        summary += f"Vocab size:        {self.get_vocab_size()}\n"  
+        summary += f"Embedding size:    {self.get_embedding_size()}\n"
+        summary += f"Principal shape:   {self.get_principal_shape()}\n" 
+        summary += f"Bottleneck shape:  {self.get_bottleneck_shape()}\n" 
+        summary += f"Compression ratio: {self.get_compression_ratio()}\n" 
+        
+        summary += "Bottleneck:\n"
+        if self.bottleneck is not None:
+            shapes = self.bottleneck.get_shapes()
+            for name, shape in shapes:
+                summary += f"{name}: {shape}\n"
+
+        return summary
+
     def get_block_size(self):
         return self.config.block_size
     

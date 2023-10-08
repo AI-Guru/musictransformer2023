@@ -46,19 +46,19 @@ class SimpleBottleneck(nn.Module):
 
 class VariationalBottleneck(nn.Module):
 
-    def __init__(self, block_size, n_embd, depth):
+    def __init__(self, config):
         super(VariationalBottleneck, self).__init__()
 
-        assert depth >= 1, "Depth should be at least 1"
-        
-        self.block_size = block_size
-        self.n_embd = n_embd
+        self.block_size = config.block_size
+        self.n_embd = config.n_embd
+
+        channels_list = [config.n_embd] + config.bottleneck_channels_list
 
         # Encoder layers
         encoder_layers = []
-        for i in range(depth):
-            in_channels = n_embd // (2 ** i)
-            out_channels = n_embd // (2 ** (i + 1))
+        for channels_index in range(len(channels_list) - 2):
+            in_channels = channels_list[channels_index]
+            out_channels = channels_list[channels_index + 1]
             encoder_layers.extend([
                 nn.Conv1d(in_channels, out_channels, kernel_size=5, stride=2, padding=2),
                 nn.ReLU()
@@ -67,7 +67,7 @@ class VariationalBottleneck(nn.Module):
 
         # Masking layer. This is used to mask out the latent space.
         masking_layers = []
-        for i in range(depth + 1):
+        for i in range(len(channels_list) - 1):
             in_channels = 1
             out_channels = 1
             conv_layer = nn.Conv1d(in_channels, out_channels, kernel_size=5, stride=2, padding=2, padding_mode="replicate", bias=False)
@@ -77,21 +77,22 @@ class VariationalBottleneck(nn.Module):
         self.masking_layers = nn.Sequential(*masking_layers)
 
         # Produce mean and log variance for the latent space
-        self.fc_mu = nn.Conv1d(n_embd // (2 ** depth), n_embd // (2 ** (depth + 1)), kernel_size=5, stride=2, padding=2)
-        self.fc_logvar = nn.Conv1d(n_embd // (2 ** depth), n_embd // (2 ** (depth + 1)), kernel_size=5, stride=2, padding=2)
+        in_channels = channels_list[-2]
+        out_channels = channels_list[-1]
+        self.fc_mu = nn.Conv1d(in_channels, out_channels, kernel_size=5, stride=2, padding=2)
+        self.fc_logvar = nn.Conv1d(in_channels, out_channels, kernel_size=5, stride=2, padding=2)
 
         # Decoder layers
         decoder_layers = []
-        for i in range(depth, 0, -1):
-            in_channels = n_embd // (2 ** (i + 1))
-            out_channels = n_embd // (2 ** i)
+        for i in range(len(channels_list), 1, -1):
+            in_channels = channels_list[i - 1]
+            out_channels = channels_list[i - 2]
             decoder_layers.extend([
                 nn.ConvTranspose1d(in_channels, out_channels, kernel_size=5, stride=2, padding=2, output_padding=1),
                 nn.ReLU()
             ])
-        decoder_layers.append(nn.ConvTranspose1d(n_embd // 2, n_embd, kernel_size=5, stride=2, padding=2, output_padding=1))
-        decoder_layers.append(nn.ReLU())
         self.decoder_layers = nn.Sequential(*decoder_layers)
+
 
     def reparameterize(self, mu, logvar):
         std = torch.exp(0.5 * logvar)
