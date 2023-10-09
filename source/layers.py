@@ -7,6 +7,17 @@ import torch.nn as nn
 from torch.nn import functional as F
 
 
+class TransposeLayer(nn.Module):
+
+    def __init__(self, dim1, dim2):
+        super(TransposeLayer, self).__init__()
+        self.dim1 = dim1
+        self.dim2 = dim2
+
+    def forward(self, x):
+        return x.transpose(self.dim1, self.dim2)
+    
+
 class LayerNorm(nn.Module):
     """ LayerNorm but with an optional bias. PyTorch doesn't support simply bias=False """
 

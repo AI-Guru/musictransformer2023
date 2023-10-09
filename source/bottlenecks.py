@@ -1,6 +1,11 @@
 import torch
 import torch.nn as nn
 import sys
+sys.path.append("..")
+
+from source.layers import (
+    TransposeLayer,
+)
 
 class BottleneckFactory:
 
@@ -8,48 +13,6 @@ class BottleneckFactory:
         the_class = getattr(sys.modules[__name__], class_name)
         return the_class
         
-class SimpleBottleneck(nn.Module):
-    def __init__(self, block_size, n_embd):
-        super(SimpleBottleneck, self).__init__()
-        
-        # Encoder
-        self.encoder_layers = nn.Sequential(
-            nn.Conv1d(n_embd, n_embd // 2, kernel_size=5, stride=2, padding=2),
-            nn.ReLU(),
-            nn.Conv1d(n_embd // 2, n_embd // 4, kernel_size=5, stride=2, padding=2),
-            nn.ReLU(),
-            nn.Conv1d(n_embd // 4, n_embd // 8, kernel_size=5, stride=2, padding=2),
-            nn.ReLU()
-        )
-        
-        # Decoder
-        self.decoder_layers = nn.Sequential(
-            nn.ConvTranspose1d(n_embd // 8, n_embd // 4, kernel_size=5, stride=2, padding=2, output_padding=1),
-            nn.ReLU(),
-            nn.ConvTranspose1d(n_embd // 4, n_embd // 2, kernel_size=5, stride=2, padding=2, output_padding=1),
-            nn.ReLU(),
-            nn.ConvTranspose1d(n_embd // 2, n_embd, kernel_size=5, stride=2, padding=2, output_padding=1),
-            nn.ReLU()
-        )
-    
-    def forward(self, x, return_loss=False):
-        x = self.encode(x)
-        x = self.decode(x)
-        if return_loss:
-            return x, 0.0
-        return x
-
-    def encode(self, x):
-        x = x.transpose(1, 2)
-        z = self.encoder_layers(x)
-        return z
-
-    def decode(self, z):
-        y = self.decoder_layers(z)
-        y = y.transpose(1, 2)
-        return y
-
-
 
 class BaseBottleneck(nn.Module):
 
@@ -360,18 +323,6 @@ class Linear2DBottleneck(BaseBottleneck):
 
         # Call the super constructor.
         super(Linear2DBottleneck, self).__init__(config, encoder, decoder, mu, logvar)
-
-
-
-class TransposeLayer(nn.Module):
-
-    def __init__(self, dim1, dim2):
-        super(TransposeLayer, self).__init__()
-        self.dim1 = dim1
-        self.dim2 = dim2
-
-    def forward(self, x):
-        return x.transpose(self.dim1, self.dim2)
 
 
 class VariationalCNNBottleneck(BaseBottleneck):
