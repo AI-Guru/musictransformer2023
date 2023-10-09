@@ -367,12 +367,15 @@ class Trainer:
                     )
                 else:
                     raise Exception(f"Unknown model family: {model.family}")
-                loss = reconstruction_loss + bottleneck_loss_coefficient * bottleneck_loss
-
-                # Update epoch loss.
+                
+                # Add the bottleneck loss if it is not None.
+                if bottleneck_loss is not None:
+                    loss = reconstruction_loss + bottleneck_loss_coefficient * bottleneck_loss
+                    losses_dict["train/bottleneck"].append(bottleneck_loss.item())
+                else:
+                    loss = reconstruction_loss
                 losses_dict["train/loss"].append(loss.item())
                 losses_dict["train/reconstruction"].append(reconstruction_loss.item())
-                losses_dict["train/bottleneck"].append(bottleneck_loss.item())
 
                 # Backward pass.
                 scaler.scale(loss).backward()
@@ -438,18 +441,13 @@ class Trainer:
                         raise Exception(f"Unknown model family: {model.family}")
 
                     # Update epoch loss.
-                    loss = reconstruction_loss + bottleneck_loss_coefficient * bottleneck_loss
+                    if bottleneck_loss is not None:
+                        loss = reconstruction_loss + bottleneck_loss_coefficient * bottleneck_loss
+                        losses_dict["val/bottleneck"].append(bottleneck_loss.item())
+                    else:
+                        loss = reconstruction_loss
                     losses_dict["val/loss"].append(loss.item())
                     losses_dict["val/reconstruction"].append(reconstruction_loss.item())
-                    losses_dict["val/bottleneck"].append(bottleneck_loss.item())
-
-                    # Free memory.
-                    #del encoder_ids_validate
-                    #del decoder_ids_validate
-                    #del target_ids_validate
-                    #del loss
-                    #del reconstruction_loss
-                    #del bottleneck_loss
                     
                 print("")
                 torch.cuda.empty_cache()

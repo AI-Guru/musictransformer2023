@@ -78,13 +78,13 @@ def train():
     # Create the model config.
     model_config = EncoderTransformerConfig(
         vocab_size = 320,
-        n_layer = 3,
+        n_layer = 4,
         n_head = 8,
         n_embd = 512,
         dropout = 0.0,
         bias = False,
         block_size = 512,
-        bottleneck = "variational", # "simple" or "variational" or "none"
+        bottleneck = "none", # "simple" or "variational" or "none"
         bottleneck_channels_list=[192, 256, 320],
     )
 

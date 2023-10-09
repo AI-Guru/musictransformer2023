@@ -93,7 +93,6 @@ class VariationalBottleneck(nn.Module):
             ])
         self.decoder_layers = nn.Sequential(*decoder_layers)
 
-
     def reparameterize(self, mu, logvar):
         std = torch.exp(0.5 * logvar)
         eps = torch.randn_like(std)
