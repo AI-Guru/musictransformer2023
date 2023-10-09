@@ -189,7 +189,15 @@ class VariationalBottleneck(nn.Module):
 
         return shapes
 
-    
     def get_shape(self):
         depth = len(self.encoder_layers) // 2  # since each layer is paired with a ReLU
         return (self.n_embd // (2 ** (depth + 1)), self.block_size // (2 ** depth))
+    
+
+class Linear1DBottleneck(nn.Module):
+
+    # A layer that converts the samples to 1D, applies a linear layer, and converts back to 2D.
+
+    def __init__(self, config):
+        super(Linear1DBottleneck, self).__init__()
+        assert False, "Implement!"
