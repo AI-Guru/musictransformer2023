@@ -216,7 +216,7 @@ class BaseVariationalBottleneck(nn.Module):
 
     # A layer that converts the samples to 1D, applies a linear layer, and converts back to 2D.
 
-    def __init__(self, config, encoder, decoder, mu, logvar):
+    def __init__(self, config, encoder, decoder, mu, logvar, masking_layers=None):
         super(BaseVariationalBottleneck, self).__init__()
 
         self.block_size = config.block_size
@@ -226,6 +226,7 @@ class BaseVariationalBottleneck(nn.Module):
         self.decoder_layers = decoder
         self.mu = mu
         self.logvar = logvar
+        self.masking_layers = masking_layers
 
     def reparameterize(self, mu, logvar):
         std = torch.exp(0.5 * logvar)
@@ -244,7 +245,7 @@ class BaseVariationalBottleneck(nn.Module):
 
         # Mask out the latent space.
         padding_mask_latent = None
-        if padding_mask is not None:
+        if padding_mask is not None and self.masking_layers is not None:
             padding_mask = padding_mask.unsqueeze(1)
             padding_mask_latent = self.masking_layers(padding_mask)
             #padding_mask_latent = padding_mask_latent.squeeze(1)
@@ -267,8 +268,8 @@ class BaseVariationalBottleneck(nn.Module):
     
     def encode(self, x):
         h = self.encoder_layers(x)
-        mu = self.fc_mu(h)
-        logvar = self.fc_logvar(h)
+        mu = self.mu(h)
+        logvar = self.logvar(h)
         return mu, logvar
     
     def decode(self, z):
