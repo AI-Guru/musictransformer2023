@@ -20,6 +20,7 @@ from source.bottlenecks import (
     SimpleBottleneck,
     VariationalBottleneck,
     VariationalLinear1DBottleneck,
+    VariationalCNNBottleneck
 )
 from source.tokenizer import Tokenizer
 
@@ -70,6 +71,8 @@ class EncoderTransformer(nn.Module):
             self.bottleneck = VariationalBottleneck(config)
         elif config.bottleneck == "variational_linear_1d":
             self.bottleneck = VariationalLinear1DBottleneck(config)
+        elif config.bottleneck == "variational_cnn":
+            self.bottleneck = VariationalCNNBottleneck(config)
         else: 
             raise NotImplementedError(f"Bottleneck {config.bottleneck} not implemented yet.")
 

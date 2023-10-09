@@ -389,3 +389,67 @@ class VariationalLinear1DBottleneck(BaseVariationalBottleneck):
 
         # Call the super constructor.
         super(VariationalLinear1DBottleneck, self).__init__(config, encoder, decoder, mu, logvar)
+
+class TransposeLayer(nn.Module):
+
+    def __init__(self, dim1, dim2):
+        super(TransposeLayer, self).__init__()
+        self.dim1 = dim1
+        self.dim2 = dim2
+
+    def forward(self, x):
+        return x.transpose(self.dim1, self.dim2)
+
+
+class VariationalCNNBottleneck(BaseVariationalBottleneck):
+
+    # A layer that converts the samples to 1D, applies a linear layer, and converts back to 2D.
+
+    def __init__(self, config):
+
+        # Get the channel list.
+        channels_list = [config.n_embd] + config.bottleneck_channels_list
+
+        # Encoder layers
+        encoder_layers = []
+        encoder_layers += [TransposeLayer(1, 2)]
+        for channels_index in range(len(channels_list) - 2):
+            in_channels = channels_list[channels_index]
+            out_channels = channels_list[channels_index + 1]
+            encoder_layers.extend([
+                nn.Conv1d(in_channels, out_channels, kernel_size=5, stride=2, padding=2),
+                nn.ReLU()
+            ])
+        encoder = nn.Sequential(*encoder_layers)
+
+        # Masking layer. This is used to mask out the latent space.
+        masking_layers = []
+        for i in range(len(channels_list) - 1):
+            in_channels = 1
+            out_channels = 1
+            conv_layer = nn.Conv1d(in_channels, out_channels, kernel_size=5, stride=2, padding=2, padding_mode="replicate", bias=False)
+            conv_layer.weight.data = torch.ones_like(conv_layer.weight.data) / 5
+            conv_layer.weight.requires_grad = False
+            masking_layers.append(conv_layer)
+        masking_layers = nn.Sequential(*masking_layers)
+
+        # Produce mean and log variance for the latent space
+        in_channels = channels_list[-2]
+        out_channels = channels_list[-1]
+        mu = nn.Conv1d(in_channels, out_channels, kernel_size=5, stride=2, padding=2)
+        logvar = nn.Conv1d(in_channels, out_channels, kernel_size=5, stride=2, padding=2)
+
+        # Decoder layers
+        decoder_layers = []
+        for i in range(len(channels_list), 1, -1):
+            in_channels = channels_list[i - 1]
+            out_channels = channels_list[i - 2]
+            decoder_layers.extend([
+                nn.ConvTranspose1d(in_channels, out_channels, kernel_size=5, stride=2, padding=2, output_padding=1),
+                nn.ReLU()
+            ])
+        decoder_layers += [TransposeLayer(1, 2)]
+        decoder = nn.Sequential(*decoder_layers)
+
+        # Call the super constructor.
+        super(VariationalCNNBottleneck, self).__init__(config, encoder, decoder, mu, logvar, masking_layers)
