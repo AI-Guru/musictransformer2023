@@ -41,8 +41,6 @@ def train():
         bottleneck = "Linear1DBottleneck",
         bottleneck_channels_list=[1024, 128],
 
-
-
     )
 
     # Create the model.
