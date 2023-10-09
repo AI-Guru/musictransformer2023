@@ -25,8 +25,10 @@ def train():
         dropout = 0.0,
         bias = False,
         block_size = 512,
-        bottleneck = "variational", # "simple" or "variational" or "none"
-        bottleneck_channels_list=[256, 512],
+        #bottleneck = "variational_linear_1d", # "simple" or "variational" or "none" or "variational_linear_1d"
+        #bottleneck_channels_list=[256, 512],
+        bottleneck = "variational_linear_1d", # "simple" or "variational" or "none" or "variational_linear_1d"
+        bottleneck_channels_list=[2084, 512],
     )
 
     # Create the model.

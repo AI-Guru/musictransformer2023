@@ -19,6 +19,7 @@ from source.layers import (
 from source.bottlenecks import (
     SimpleBottleneck,
     VariationalBottleneck,
+    VariationalLinear1DBottleneck,
 )
 from source.tokenizer import Tokenizer
 
@@ -67,6 +68,8 @@ class EncoderTransformer(nn.Module):
             self.bottleneck = SimpleBottleneck(config.block_size, config.n_embd)
         elif config.bottleneck == "variational":
             self.bottleneck = VariationalBottleneck(config)
+        elif config.bottleneck == "variational_linear_1d":
+            self.bottleneck = VariationalLinear1DBottleneck(config)
         else: 
             raise NotImplementedError(f"Bottleneck {config.bottleneck} not implemented yet.")
 
@@ -463,7 +466,8 @@ class EncoderTransformer(nn.Module):
         if self.bottleneck is not None:
             shapes = self.bottleneck.get_shapes()
             for name, shape in shapes:
-                summary += f"{name}: {shape} ({np.prod(shape)})\n"
+                summary += f"{name}: {shape} ({np.prod(shape):,})\n"
+            summary += f"Bottleneck parameters: {self.bottleneck.get_num_params():,}\n"
 
         return summary
 
@@ -485,7 +489,7 @@ class EncoderTransformer(nn.Module):
     
     def get_principal_shape(self):
         # Return the shape of the principal part of the model.
-        return (self.config.block_size, self.config.n_embd)
+        return [self.config.block_size, self.config.n_embd]
 
     def get_bottleneck_shape(self):
         # Raise an exception if there is no bottleneck.
