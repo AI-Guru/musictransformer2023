@@ -13,7 +13,7 @@ def test():
     print("Testing Transformer...")
     
     transformer_config = EncoderTransformerConfig(
-        bottleneck="variational",
+        bottleneck="VariationalLinear1DBottleneck",
         #bottleneck_depth=5,
     )
     print(transformer_config)

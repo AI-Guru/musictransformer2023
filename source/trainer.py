@@ -11,16 +11,10 @@ import glob
 import numpy as np
 import torch
 from torch.nn.parallel import DistributedDataParallel as DDP
-from torch.distributed import init_process_group, destroy_process_group
-
-from datasets import load_dataset # huggingface datasets
 
 import sys
 sys.path.append(".")
 
-#from model import GPTConfig, GPT
-from source.dataset import DatasetConfig, Dataset
-from source.transformer import TransformerConfig, Transformer
 from source.tokenizer import Tokenizer
 
 from dataclasses import dataclass, asdict
@@ -386,6 +380,7 @@ class Trainer:
                 losses_dict["train/reconstruction"].append(reconstruction_loss.item())
 
                 # Backward pass.
+                assert isinstance(loss, torch.Tensor), "Error: loss is not a torch.Tensor."
                 scaler.scale(loss).backward()
                 
                 # Clip the gradient.

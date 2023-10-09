@@ -144,6 +144,7 @@ class EncoderTransformer(nn.Module):
                 return_loss=True,
                 padding_mask=padding_mask,
             ) 
+            assert isinstance(bottleneck_loss, torch.Tensor), f"bottleneck_loss is {type(bottleneck_loss)}"
 
         # Add the position embeddings.
         x_encoder = x_encoder + pos_emb_encoder
@@ -159,6 +160,7 @@ class EncoderTransformer(nn.Module):
             # if we are given some desired targets also calculate the loss
             logits = self.lm_head(x_decoder)
             reconstruction_loss = F.cross_entropy(logits.view(-1, logits.size(-1)), target_ids.view(-1), ignore_index=-1)
+            assert isinstance(reconstruction_loss, torch.Tensor), f"reconstruction_loss is {type(reconstruction_loss)}"
             # Apply the padding mask.
             if padding_mask is not None:
                 reconstruction_loss = reconstruction_loss * padding_mask.view(-1)
