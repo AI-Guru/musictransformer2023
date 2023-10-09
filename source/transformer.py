@@ -18,7 +18,7 @@ from source.layers import (
 )
 from source.bottlenecks import (
     SimpleBottleneck,
-    VariationalBottleneck,
+    VariationalCNNBottleneck,
 )
 from source.tokenizer import Tokenizer
 

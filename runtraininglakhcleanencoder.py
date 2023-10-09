@@ -5,7 +5,7 @@ import sys
 sys.path.append(".")
 from source.trainer import TrainerConfig, Trainer
 from source.encodertransformer import EncoderTransformerConfig, EncoderTransformer
-from source.tokenizer import Tokenizer
+from source.bottlenecks import VariationalCNNBottleneck
 from source.dataset import DatasetConfig, Dataset
 
 
@@ -25,7 +25,7 @@ def train():
         dropout = 0.0,
         bias = False,
         block_size = 512,
-        bottleneck = "variational_cnn", # "simple" or "variational" or "none" or "variational_linear_1d"
+        bottleneck = VariationalCNNBottleneck, # "simple" or "variational" or "none" or "variational_linear_1d"
         bottleneck_channels_list=[256, 512],
         #bottleneck = "variational_linear_1d", # "simple" or "variational" or "none" or "variational_linear_1d"
         #bottleneck_channels_list=[2084, 512],

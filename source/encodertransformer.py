@@ -18,7 +18,7 @@ from source.layers import (
 )
 from source.bottlenecks import (
     SimpleBottleneck,
-    VariationalBottleneck,
+    #VariationalBottleneck,
     VariationalLinear1DBottleneck,
     VariationalCNNBottleneck
 )
@@ -67,12 +67,12 @@ class EncoderTransformer(nn.Module):
             self.bottleneck = None
         elif config.bottleneck == "simple":
             self.bottleneck = SimpleBottleneck(config.block_size, config.n_embd)
-        elif config.bottleneck == "variational":
-            self.bottleneck = VariationalBottleneck(config)
         elif config.bottleneck == "variational_linear_1d":
             self.bottleneck = VariationalLinear1DBottleneck(config)
         elif config.bottleneck == "variational_cnn":
             self.bottleneck = VariationalCNNBottleneck(config)
+        elif inspect.isclass(config.bottleneck):
+            self.bottleneck = config.bottleneck(config)
         else: 
             raise NotImplementedError(f"Bottleneck {config.bottleneck} not implemented yet.")
 
