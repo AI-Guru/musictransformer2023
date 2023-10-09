@@ -16,6 +16,36 @@ def train():
     # Get the timestamp as YYYYMMDD-HHMM.
     timestamp = datetime.datetime.now().strftime("%Y%m%d-%H%M")
 
+    # Create the model config.
+    model_config = EncoderTransformerConfig(
+        vocab_size = 320,
+        n_layer = 4,
+        n_head = 8,
+        n_embd = 128,
+        dropout = 0.0,
+        bias = False,
+        block_size = 512,
+        bottleneck = "variational", # "simple" or "variational" or "none"
+        bottleneck_channels_list=[256, 512],
+    )
+
+    # Create the model.
+    model = EncoderTransformer(model_config)
+    print(model.summary())
+    if "summary" in sys.argv:
+        return
+
+    # Create the dataset config and dataset.
+    dataset_config = DatasetConfig(
+        dataset_path = "data/lakhclean_mmmtrack_1bars_vae/generation",
+        token_dropout = False # No data augmentation.
+
+    )
+    dataset = Dataset(
+        dataset_config,
+    )
+    print(dataset)
+
     # Create the Training config.
     trainer_config = TrainerConfig(
 
@@ -63,33 +93,6 @@ def train():
 
     # Create the trainer.
     trainer = Trainer(trainer_config)
-
-    # Create the dataset config and dataset.
-    dataset_config = DatasetConfig(
-        dataset_path = "data/lakhclean_mmmtrack_1bars_vae/generation",
-        token_dropout = False # No data augmentation.
-
-    )
-    dataset = Dataset(
-        dataset_config,
-    )
-    print(dataset)
-
-    # Create the model config.
-    model_config = EncoderTransformerConfig(
-        vocab_size = 320,
-        n_layer = 4,
-        n_head = 8,
-        n_embd = 512,
-        dropout = 0.0,
-        bias = False,
-        block_size = 512,
-        bottleneck = "none", # "simple" or "variational" or "none"
-        bottleneck_channels_list=[192, 256, 320],
-    )
-
-    # Create the model.
-    model = EncoderTransformer(model_config)
 
     # Train.
     trainer.train(model, dataset)

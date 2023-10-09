@@ -479,6 +479,8 @@ class EncoderTransformer(nn.Module):
     def get_compression_ratio(self):
         principal_shape = self.get_principal_shape()
         bottleneck_shape = self.get_bottleneck_shape()
+        if bottleneck_shape is None:
+            return None
         return np.prod(bottleneck_shape) / np.prod(principal_shape)
     
     def get_principal_shape(self):
@@ -488,7 +490,7 @@ class EncoderTransformer(nn.Module):
     def get_bottleneck_shape(self):
         # Raise an exception if there is no bottleneck.
         if self.bottleneck is None:
-            raise Exception("No bottleneck!")
+            return None
         
         # Return the shape.
         return self.bottleneck.get_shape()
