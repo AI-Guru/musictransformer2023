@@ -463,7 +463,7 @@ class EncoderTransformer(nn.Module):
         if self.bottleneck is not None:
             shapes = self.bottleneck.get_shapes()
             for name, shape in shapes:
-                summary += f"{name}: {shape}\n"
+                summary += f"{name}: {shape} ({np.prod(shape)})\n"
 
         return summary
 

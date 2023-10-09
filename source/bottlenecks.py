@@ -152,18 +152,25 @@ class VariationalBottleneck(nn.Module):
         x = torch.randn((1, self.block_size, self.n_embd))
         shapes += [("x", x.shape)]
 
+
+
         # Encode the input. Use the encoder, layer by layer.
         x = x.transpose(1, 2)
+
         shapes += [("x transposed", x.shape)]
         for layer in self.encoder_layers:
             x = layer(x)
+            print(layer, x.shape)
             shapes += [(str(layer), x.shape)]
+
+       # assert False
+
 
         # Produce mean and log variance for the latent space
         mu = self.fc_mu(x)
-        shapes += [("mu", mu.shape)]
+        shapes += [(f"{self.fc_mu} (mu)", mu.shape)]
         logvar = self.fc_logvar(x)
-        shapes += [("logvar", logvar.shape)]
+        shapes += [(f"{self.fc_logvar} (logvar)", logvar.shape)]
 
         # Reparameterize
         z = self.reparameterize(mu, logvar)
@@ -190,9 +197,25 @@ class VariationalBottleneck(nn.Module):
         return shapes
 
     def get_shape(self):
-        depth = len(self.encoder_layers) // 2  # since each layer is paired with a ReLU
-        return (self.n_embd // (2 ** (depth + 1)), self.block_size // (2 ** depth))
-    
+        # A random vector of shape (batch_size, block_size, n_embd)
+        x = torch.randn((1, self.block_size, self.n_embd))
+
+        # Transform the input.
+        x = x.transpose(1, 2)
+
+        # Run it through the encoder.
+        x = self.encoder_layers(x)
+
+        # Run through the mean and log variance.
+        mu = self.fc_mu(x)
+        logvar = self.fc_logvar(x)
+
+        # Reparameterize
+        z = self.reparameterize(mu, logvar)
+
+        # Return the shape of the latent space.
+        return list(z.shape[1:])
+        
 
 class Linear1DBottleneck(nn.Module):
 
