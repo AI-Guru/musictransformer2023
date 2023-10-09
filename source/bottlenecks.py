@@ -1,7 +1,13 @@
 import torch
 import torch.nn as nn
+import sys
 
-    
+class BottleneckFactory:
+
+    def get_class(class_name:str):
+        the_class = getattr(sys.modules[__name__], class_name)
+        return the_class
+        
 class SimpleBottleneck(nn.Module):
     def __init__(self, block_size, n_embd):
         super(SimpleBottleneck, self).__init__()
@@ -44,12 +50,11 @@ class SimpleBottleneck(nn.Module):
         return y
 
 
-class BaseVariationalBottleneck(nn.Module):
 
-    # A layer that converts the samples to 1D, applies a linear layer, and converts back to 2D.
+class BaseBottleneck(nn.Module):
 
     def __init__(self, config, encoder, decoder, mu, logvar, masking_layers=None):
-        super(BaseVariationalBottleneck, self).__init__()
+        super(BaseBottleneck, self).__init__()
 
         self.block_size = config.block_size
         self.n_embd = config.n_embd
@@ -59,20 +64,17 @@ class BaseVariationalBottleneck(nn.Module):
         self.mu = mu
         self.logvar = logvar
         self.masking_layers = masking_layers
-
-    def reparameterize(self, mu, logvar):
-        std = torch.exp(0.5 * logvar)
-        eps = torch.randn_like(std)
-        return mu + eps * std
     
     def forward(self, x, return_loss=False, padding_mask=None):
             
-        # Note: Shape is (batch_size, block_size, n_embd) as it comes from the transformer.
-
         # Encode the input.
-        mu, logvar = self.encode(x)
+        if self.mu is not None and self.logvar is not None:
+            mu, logvar = self.encode(x)
+            z = self.reparameterize(mu, logvar)
+        else: 
+            z = self.encode(x)
 
-        z = self.reparameterize(mu, logvar)
+        # Decode.
         x_recon = self.decode(z)
 
         # Mask out the latent space.
@@ -84,26 +86,33 @@ class BaseVariationalBottleneck(nn.Module):
 
         # Return the reconstruction and the loss.
         if return_loss:
-            kl_loss = -0.5 * (1 + logvar - mu.pow(2) - logvar.exp())
-            #print(f"kl_loss.shape: {kl_loss.shape}")
-            if padding_mask_latent is not None:
-                #print(f"padding_mask_latent.shape: {padding_mask_latent.shape}")
-                #print(f"padding_mask_latent: {padding_mask_latent}")
-                kl_loss = kl_loss * padding_mask_latent
-                #print(f"kl_loss.shape: {kl_loss.shape}")
-                #print(f"kl_loss: {kl_loss.detach().transpose(2, 1).numpy().tolist()}")
-            kl_loss = torch.sum(kl_loss)
-            return x_recon, kl_loss
+            if self.mu is not None and self.logvar is not None:
+                kl_loss = -0.5 * (1 + logvar - mu.pow(2) - logvar.exp())
+                if padding_mask_latent is not None:
+                    kl_loss = kl_loss * padding_mask_latent
+                kl_loss = torch.sum(kl_loss)
+                return x_recon, kl_loss
+            else:
+                return x_recon, None
 
         # Return the reconstruction.
         return x_recon
     
     def encode(self, x):
         h = self.encoder_layers(x)
-        mu = self.mu(h)
-        logvar = self.logvar(h)
-        return mu, logvar
+        
+        if self.mu is not None and self.logvar is not None:
+            mu = self.mu(h)
+            logvar = self.logvar(h)
+            return mu, logvar
+        else:
+            return h
     
+    def reparameterize(self, mu, logvar):
+        std = torch.exp(0.5 * logvar)
+        eps = torch.randn_like(std)
+        return mu + eps * std
+
     def decode(self, z):
         y = self.decoder_layers(z)
         return y
@@ -123,14 +132,17 @@ class BaseVariationalBottleneck(nn.Module):
             shapes += [(str(layer), x.shape)]
 
         # Produce mean and log variance for the latent space
-        mu = self.mu(x)
-        shapes += [(f"{self.mu} (mu)", mu.shape)]
-        logvar = self.logvar(x)
-        shapes += [(f"{self.logvar} (logvar)", logvar.shape)]
+        if self.mu is not None and self.logvar is not None:
+            mu = self.mu(x)
+            shapes += [(f"{self.mu} (mu)", mu.shape)]
+            logvar = self.logvar(x)
+            shapes += [(f"{self.logvar} (logvar)", logvar.shape)]
 
-        # Reparameterize
-        z = self.reparameterize(mu, logvar)
-        shapes += [("z", z.shape)]
+            # Reparameterize
+            z = self.reparameterize(mu, logvar)
+            shapes += [("z", z.shape)]
+        else:
+            z = x
 
         # Decode the latent space. Use the decoder, layer by layer.
         for layer in self.decoder_layers:
@@ -160,11 +172,14 @@ class BaseVariationalBottleneck(nn.Module):
         x = self.encoder_layers(x)
 
         # Run through the mean and log variance.
-        mu = self.mu(x)
-        logvar = self.logvar(x)
+        if self.mu is not None and self.logvar is not None:
+            mu = self.mu(x)
+            logvar = self.logvar(x)
 
-        # Reparameterize
-        z = self.reparameterize(mu, logvar)
+            # Reparameterize
+            z = self.reparameterize(mu, logvar)
+        else:
+            z = x
 
         # Return the shape of the latent space.
         return list(z.shape[1:])
@@ -176,7 +191,51 @@ class BaseVariationalBottleneck(nn.Module):
         return num_params
     
 
-class VariationalLinear1DBottleneck(BaseVariationalBottleneck):
+class Linear1DBottleneck(BaseBottleneck):
+
+    # A layer that converts the samples to 1D, applies a linear layer, and converts back to 2D.
+
+    def __init__(self, config):
+
+        # Get the channel list.
+        channels_list = [config.block_size * config.n_embd] + config.bottleneck_channels_list
+
+        # Encoder layers.
+        # Start with reshaping the input to 1D.
+        # Then linear layers.
+        encoder_layers = []
+        encoder_layers += [nn.Flatten()]
+        for i in range(len(channels_list) - 1):
+            in_channels = channels_list[i]
+            out_channels = channels_list[i + 1]
+            encoder_layers.extend([
+                nn.Linear(in_channels, out_channels),
+                nn.ReLU()
+            ])
+        encoder = nn.Sequential(*encoder_layers)
+
+        # Produce mean and log variance for the latent space
+        mu = None
+        logvar = None
+
+        # Decoder layers.
+        # Start with linear layers.
+        # Then reshape back to 2D.
+        decoder_layers = []
+        for i in range(len(channels_list) - 1, 0, -1):
+            in_channels = channels_list[i]
+            out_channels = channels_list[i - 1]
+            decoder_layers.extend([
+                nn.Linear(in_channels, out_channels),
+                nn.ReLU()
+            ])
+        decoder_layers += [nn.Unflatten(1, (config.block_size, config.n_embd))]
+        decoder = nn.Sequential(*decoder_layers)
+
+        # Call the super constructor.
+        super(Linear1DBottleneck, self).__init__(config, encoder, decoder, mu, logvar)
+
+class VariationalLinear1DBottleneck(BaseBottleneck):
 
     # A layer that converts the samples to 1D, applies a linear layer, and converts back to 2D.
 
@@ -222,6 +281,88 @@ class VariationalLinear1DBottleneck(BaseVariationalBottleneck):
         # Call the super constructor.
         super(VariationalLinear1DBottleneck, self).__init__(config, encoder, decoder, mu, logvar)
 
+
+class VariationalLinear2DBottleneck(BaseBottleneck):
+    # Works linearly on the last dimension.
+
+    def __init__(self, config):
+            
+        # Get the channel list.
+        channels_list = [config.n_embd] + config.bottleneck_channels_list
+
+        # Encoder layers.
+        # Then linear layers.
+        encoder_layers = []
+        for i in range(len(channels_list) - 2):
+            in_channels = channels_list[i]
+            out_channels = channels_list[i + 1]
+            encoder_layers.extend([
+                nn.Linear(in_channels, out_channels),
+                nn.ReLU()
+            ])
+        encoder = nn.Sequential(*encoder_layers)
+
+        # Produce mean and log variance for the latent space
+        in_channels = config.bottleneck_channels_list[-2]
+        out_channels = config.bottleneck_channels_list[-1]
+        mu = nn.Linear(in_channels, out_channels)
+        logvar = nn.Linear(in_channels, out_channels)
+
+        # Decoder layers.
+        decoder_layers = []
+        for i in range(len(channels_list) - 1, 0, -1):
+            in_channels = channels_list[i]
+            out_channels = channels_list[i - 1]
+            decoder_layers.extend([
+                nn.Linear(in_channels, out_channels),
+                nn.ReLU()
+            ])
+        decoder = nn.Sequential(*decoder_layers)
+
+        # Call the super constructor.
+        super(VariationalLinear2DBottleneck, self).__init__(config, encoder, decoder, mu, logvar)
+
+
+class Linear2DBottleneck(BaseBottleneck):
+    # Works linearly on the last dimension.
+
+    def __init__(self, config):
+            
+        # Get the channel list.
+        channels_list = [config.n_embd] + config.bottleneck_channels_list
+
+        # Encoder layers.
+        # Then linear layers.
+        encoder_layers = []
+        for i in range(len(channels_list) - 1):
+            in_channels = channels_list[i]
+            out_channels = channels_list[i + 1]
+            encoder_layers.extend([
+                nn.Linear(in_channels, out_channels),
+                nn.ReLU()
+            ])
+        encoder = nn.Sequential(*encoder_layers)
+
+        # Produce mean and log variance for the latent space
+        mu = None
+        logvar = None
+
+        # Decoder layers.
+        decoder_layers = []
+        for i in range(len(channels_list) - 1, 0, -1):
+            in_channels = channels_list[i]
+            out_channels = channels_list[i - 1]
+            decoder_layers.extend([
+                nn.Linear(in_channels, out_channels),
+                nn.ReLU()
+            ])
+        decoder = nn.Sequential(*decoder_layers)
+
+        # Call the super constructor.
+        super(Linear2DBottleneck, self).__init__(config, encoder, decoder, mu, logvar)
+
+
+
 class TransposeLayer(nn.Module):
 
     def __init__(self, dim1, dim2):
@@ -233,7 +374,7 @@ class TransposeLayer(nn.Module):
         return x.transpose(self.dim1, self.dim2)
 
 
-class VariationalCNNBottleneck(BaseVariationalBottleneck):
+class VariationalCNNBottleneck(BaseBottleneck):
 
     # A layer that converts the samples to 1D, applies a linear layer, and converts back to 2D.
 

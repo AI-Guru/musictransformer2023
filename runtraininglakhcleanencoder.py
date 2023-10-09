@@ -5,7 +5,10 @@ import sys
 sys.path.append(".")
 from source.trainer import TrainerConfig, Trainer
 from source.encodertransformer import EncoderTransformerConfig, EncoderTransformer
-from source.bottlenecks import VariationalCNNBottleneck
+from source.bottlenecks import (
+    VariationalCNNBottleneck,
+    VariationalLinear2DBottleneck
+)
 from source.dataset import DatasetConfig, Dataset
 
 
@@ -19,16 +22,27 @@ def train():
     # Create the model config.
     model_config = EncoderTransformerConfig(
         vocab_size = 320,
-        n_layer = 4,
+        n_layer = 2,
         n_head = 8,
         n_embd = 128,
         dropout = 0.0,
         bias = False,
         block_size = 512,
-        bottleneck = VariationalCNNBottleneck, # "simple" or "variational" or "none" or "variational_linear_1d"
-        bottleneck_channels_list=[256, 512],
+        
+        #bottleneck = VariationalCNNBottleneck, # "simple" or "variational" or "none" or "variational_linear_1d"
+        #bottleneck_channels_list=[256, 512],
+        
         #bottleneck = "variational_linear_1d", # "simple" or "variational" or "none" or "variational_linear_1d"
         #bottleneck_channels_list=[2084, 512],
+    
+        #bottleneck = "VariationalLinear2DBottleneck",
+        #bottleneck_channels_list=[64, 16, 2],
+
+        bottleneck = "Linear1DBottleneck",
+        bottleneck_channels_list=[1024, 128],
+
+
+
     )
 
     # Create the model.
@@ -60,6 +74,7 @@ def train():
         # Bottleneck config.
         bottleneck_loss_coefficient=1.0,
         bottleneck_loss_coefficient_max=1.0,
+        bottleneck_loss_iterations=15_000,
         
         # Optimizer settings.
         learning_rate=6e-4, # Max learning rate.
@@ -81,15 +96,15 @@ def train():
         wandb_run_name=f"encodertransformer_{timestamp}",
         
         # When to evaluate.
-        eval_every=1000,
+        eval_every=2000,
         eval_mode="steps",
 
         # When to log.
-        log_every=1000,
+        log_every=2000,
         log_mode="steps",
 
         # When to save.
-        save_every=1000,
+        save_every=2000,
         save_mode= "steps",
     )
 

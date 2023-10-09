@@ -33,7 +33,7 @@ class TrainerConfig:
     num_epochs: int = 500
 
     # Dataset.
-    #dataset_path = "data/jsfakes4bars/generation"
+    use_padding_mask: bool = False
 
     # I/O
     out_dir: str = "out"
@@ -97,6 +97,9 @@ class TrainerConfig:
     def validate(self):
         # General.
         assert isinstance(self.num_epochs, int) and self.num_epochs > 0, "num_epochs must be a positive integer"
+
+        # Dataset.
+        assert isinstance(self.use_padding_mask, bool), "use_padding_mask must be a boolean"
 
         # I/O
         assert isinstance(self.out_dir, str), "out_dir must be a string"
@@ -338,10 +341,12 @@ class Trainer:
             #do_step = False # TODO Remove this.
             if do_step:
 
-                print(f"Epoch {current_epoch} step {total_training_steps}", end="\r")
-
                 # Unpack the batch.
                 encoder_ids_train, decoder_ids_train, target_ids_train, padding_masks_train = batch_train
+
+                # Padding mask.
+                if not self.config.use_padding_mask:
+                    padding_masks_train = None
 
                 # Get the learning rate.
                 lr = get_learning_rate(total_training_steps) if self.config.decay_lr else self.config.learning_rate
@@ -350,6 +355,9 @@ class Trainer:
 
                 # Get the bottleneck loss coefficient.
                 bottleneck_loss_coefficient = get_bottleneck_loss_coefficient(total_training_steps)
+
+                # Print.
+                print(f"Epoch={current_epoch:,} step={total_training_steps:,} lr={lr:.4f} blc={bottleneck_loss_coefficient:.4f}", end="\r")
 
                 # Forward pass and get the loss.
                 if model.family == "encoderdecoder":
@@ -416,13 +424,17 @@ class Trainer:
                 # Let us try emptying the cache here.
                 torch.cuda.empty_cache()
 
-                print(f"Validate at epoch {current_epoch} step {total_training_steps}...")
+                print(f"Validate epoch {current_epoch:,} step {total_training_steps:,}...")
                 model.eval()
                 validation_steps = 0
                 for encoder_ids_validate, decoder_ids_validate, target_ids_validate, padding_masks_validate in dataset.iterate(split="validate", shuffle=False, batch_size=self.config.batch_size):
-                    print(f"Validation step {validation_steps}", end="\r")
+                    print(f"Validation step {validation_steps:,}", end="\r")
                     validation_steps += 1
                     
+                    # Padding mask.
+                    if not self.config.use_padding_mask:
+                        padding_masks_validate = None
+
                     # Forward pass and get the losses.
                     if model.family == "encoderdecoder":
                         _, reconstruction_loss, bottleneck_loss = model(

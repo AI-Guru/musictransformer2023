@@ -17,10 +17,7 @@ from source.layers import (
     LayerNorm,
 )
 from source.bottlenecks import (
-    SimpleBottleneck,
-    #VariationalBottleneck,
-    VariationalLinear1DBottleneck,
-    VariationalCNNBottleneck
+    BottleneckFactory
 )
 from source.tokenizer import Tokenizer
 
@@ -62,19 +59,17 @@ class EncoderTransformer(nn.Module):
             ln_f = LayerNorm(config.n_embd, bias=config.bias),
         ))
 
+        # Is there a class with the name config.bottleneck in source.bottlenecks?
+        # Use reflection to get the class.
         # The bottleneck part.
         if config.bottleneck == "none":
             self.bottleneck = None
-        elif config.bottleneck == "simple":
-            self.bottleneck = SimpleBottleneck(config.block_size, config.n_embd)
-        elif config.bottleneck == "variational_linear_1d":
-            self.bottleneck = VariationalLinear1DBottleneck(config)
-        elif config.bottleneck == "variational_cnn":
-            self.bottleneck = VariationalCNNBottleneck(config)
-        elif inspect.isclass(config.bottleneck):
-            self.bottleneck = config.bottleneck(config)
-        else: 
-            raise NotImplementedError(f"Bottleneck {config.bottleneck} not implemented yet.")
+        else:
+            the_class = BottleneckFactory.get_class(config.bottleneck)
+            if the_class is None:
+                raise Exception(f"Could not find class {config.bottleneck} in source.bottlenecks.")
+            else:
+                self.bottleneck = the_class(config)
 
         # The decoder part.
         self.decoder = nn.ModuleDict(dict(
