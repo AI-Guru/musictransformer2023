@@ -7,12 +7,14 @@ import sys
 sys.path.append(".")
 from source.trainer import TrainerConfig, Trainer
 from source.transformer import TransformerConfig, Transformer
+from source.encodertransformer import EncoderTransformerConfig, EncoderTransformer
 
 def main():
 
-    test_load_existing()
+    #test_load_existing()
 
-    test_load_save()
+    test_load_save(TransformerConfig, Transformer)
+    test_load_save(EncoderTransformerConfig, EncoderTransformer)
 
 
 def test_load_existing():
@@ -29,14 +31,14 @@ def test_load_existing():
         print("Loaded transformer")
 
 
-def test_load_save():
+def test_load_save(config_class, model_class):
 
     # Create a transformer. 
     # Store it to a file in a temporary directory.
     # Load it back from the file.
     with tempfile.TemporaryDirectory() as tempdir:
-        config = TransformerConfig()
-        transformer = Transformer(config)
+        config = config_class()
+        transformer = model_class(config)
     
         # Save the model via the trainer.
         trainer_config = TrainerConfig()
@@ -46,7 +48,7 @@ def test_load_save():
         print(f"checkpoint_path: {checkpoint_path}")
 
         # Load the model via the transformer.
-        transformer = Transformer.load(checkpoint_path)
+        transformer = model_class.load(checkpoint_path)
         print("Loaded transformer")
 
 

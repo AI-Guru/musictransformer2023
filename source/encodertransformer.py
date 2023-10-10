@@ -19,24 +19,14 @@ from source.layers import (
 from source.bottlenecks import (
     BottleneckFactory
 )
-from source.tokenizer import Tokenizer
+from source.basetransformer import BaseTransformerConfig, BaseTransformer
 
 @dataclass
-class EncoderTransformerConfig:
-    block_size: int = 256 #1024
-    vocab_size: int = 400 #50304 # GPT-2 vocab_size of 50257, padded up to nearest multiple of 64 for efficiency
-    n_layer: int = 4 #12
-    n_head: int = 4# 12
-    n_embd: int = 128 #768
-    dropout: float = 0.0
-    bias: bool = True # True: bias in Linears and LayerNorms, like GPT-2. False: a bit better and faster
-    weight_sharing: bool = True # share weights between token and positional embeddings like GPT-2
-    bottleneck: str = "none"
-    bottleneck_channels_list: List[int] = field(default_factory=lambda: [192, 256, 320])
-    flash_attention: bool = False
+class EncoderTransformerConfig(BaseTransformerConfig):
+    pass
     
 
-class EncoderTransformer(nn.Module):
+class EncoderTransformer(BaseTransformer):
 
     def __init__(self, config):
         super().__init__()
@@ -245,62 +235,6 @@ class EncoderTransformer(nn.Module):
             if hasattr(block.attn, 'bias'):
                 block.attn.bias = block.attn.bias[:,:,:block_size,:block_size]
 
-    @classmethod
-    def from_pretrained(cls, model_type, override_args=None):
-        assert model_type in {'gpt2', 'gpt2-medium', 'gpt2-large', 'gpt2-xl'}
-        override_args = override_args or {} # default to empty dict
-        # only dropout can be overridden see more notes below
-        assert all(k == 'dropout' for k in override_args)
-        from transformers import GPT2LMHeadModel
-        print("loading weights from pretrained gpt: %s" % model_type)
-
-        # n_layer, n_head and n_embd are determined from model_type
-        config_args = {
-            'gpt2':         dict(n_layer=12, n_head=12, n_embd=768),  # 124M params
-            'gpt2-medium':  dict(n_layer=24, n_head=16, n_embd=1024), # 350M params
-            'gpt2-large':   dict(n_layer=36, n_head=20, n_embd=1280), # 774M params
-            'gpt2-xl':      dict(n_layer=48, n_head=25, n_embd=1600), # 1558M params
-        }[model_type]
-        print("forcing vocab_size=50257, block_size=1024, bias=True")
-        config_args['vocab_size'] = 50257 # always 50257 for GPT model checkpoints
-        config_args['block_size'] = 1024 # always 1024 for GPT model checkpoints
-        config_args['bias'] = True # always True for GPT model checkpoints
-        # we can override the dropout rate, if desired
-        if 'dropout' in override_args:
-            print(f"overriding dropout rate to {override_args['dropout']}")
-            config_args['dropout'] = override_args['dropout']
-        # create a from-scratch initialized minGPT model
-        config = GPTConfig(**config_args)
-        model = GPT(config)
-        sd = model.state_dict()
-        sd_keys = sd.keys()
-        sd_keys = [k for k in sd_keys if not k.endswith('.attn.bias')] # discard this mask / buffer, not a param
-
-        # init a huggingface/transformers model
-        model_hf = GPT2LMHeadModel.from_pretrained(model_type)
-        sd_hf = model_hf.state_dict()
-
-        # copy while ensuring all of the parameters are aligned and match in names and shapes
-        sd_keys_hf = sd_hf.keys()
-        sd_keys_hf = [k for k in sd_keys_hf if not k.endswith('.attn.masked_bias')] # ignore these, just a buffer
-        sd_keys_hf = [k for k in sd_keys_hf if not k.endswith('.attn.bias')] # same, just the mask (buffer)
-        transposed = ['attn.c_attn.weight', 'attn.c_proj.weight', 'mlp.c_fc.weight', 'mlp.c_proj.weight']
-        # basically the openai checkpoints use a "Conv1D" module, but we only want to use a vanilla Linear
-        # this means that we have to transpose these weights when we import them
-        assert len(sd_keys_hf) == len(sd_keys), f"mismatched keys: {len(sd_keys_hf)} != {len(sd_keys)}"
-        for k in sd_keys_hf:
-            if any(k.endswith(w) for w in transposed):
-                # special treatment for the Conv1D weights we need to transpose
-                assert sd_hf[k].shape[::-1] == sd[k].shape
-                with torch.no_grad():
-                    sd[k].copy_(sd_hf[k].t())
-            else:
-                # vanilla copy over the other parameters
-                assert sd_hf[k].shape == sd[k].shape
-                with torch.no_grad():
-                    sd[k].copy_(sd_hf[k])
-
-        return model
 
     def configure_optimizers(self, weight_decay, learning_rate, betas, device_type):
         # start with all of the candidate parameters
@@ -424,92 +358,5 @@ class EncoderTransformer(nn.Module):
 
     #@classmethod
     def load(check_point_path):
-        if not os.path.exists(check_point_path):
-            raise Exception(f"Could not find checkpoint at {check_point_path}")
-        # Load the checkpoint.
-        checkpoint = torch.load(check_point_path, map_location="cpu")
 
-        # Print the keys of the checkpoint.
-        #print("Checkpoint keys:")
-        #for key in checkpoint.keys():
-        #    print(key)
-
-        # Load the config.
-        model_config_dict = checkpoint["model_config"]
-        model_config = EncoderTransformerConfig(**model_config_dict)
-
-        # Create the model.
-        model = EncoderTransformer(model_config)
-
-        # Get the keys of the state dict. Sort them and make a list.
-        state_dict_keys = model.state_dict().keys()
-        state_dict_keys = sorted(state_dict_keys)
-
-        # Get the keys of the loaded state dict. Sort them and make a list.
-        loaded_state_dict_keys = checkpoint["model"].keys()
-        loaded_state_dict_keys = sorted(loaded_state_dict_keys)
-
-        # Get the keys that both lists have in common. XOR.
-        #common_keys = set(state_dict_keys).intersection(loaded_state_dict_keys)
-        #print(f"common_keys: {len(common_keys)}")
-
-        # Get the keys that they don't have in common. XOR.
-        missing_keys = set(state_dict_keys).symmetric_difference(loaded_state_dict_keys)
-        if len(missing_keys) > 0:
-            raise Exception(f"Missing {len(missing_keys)} keys: {missing_keys}")
-        
-
-        # Both lists should have the same length.
-        assert len(state_dict_keys) == len(loaded_state_dict_keys), f"Length of state_dict_keys ({len(state_dict_keys)}) does not match length of loaded_state_dict_keys ({len(loaded_state_dict_keys)})"
-
-        # Load the state dict into the model.
-        model.load_state_dict(checkpoint["model"])
-
-        # Return the model.
-        return model
-    
-    def summary(self):
-        summary = ""
-        summary += f"Block size:        {self.get_block_size()}\n" 
-        summary += f"Vocab size:        {self.get_vocab_size()}\n"  
-        summary += f"Embedding size:    {self.get_embedding_size()}\n"
-        summary += f"Principal shape:   {self.get_principal_shape()}\n" 
-        summary += f"Bottleneck shape:  {self.get_bottleneck_shape()}\n" 
-        summary += f"Compression ratio: {self.get_compression_ratio()}\n" 
-        
-        summary += "Bottleneck:\n"
-        if self.bottleneck is not None:
-            shapes = self.bottleneck.get_shapes()
-            for name, shape in shapes:
-                summary += f"{name}: {shape} ({np.prod(shape):,})\n"
-            summary += f"Bottleneck parameters: {self.bottleneck.get_num_params():,}\n"
-
-        return summary
-
-    def get_block_size(self):
-        return self.config.block_size
-    
-    def get_vocab_size(self):
-        return self.config.vocab_size
-    
-    def get_embedding_size(self):
-        return self.config.n_embd
-
-    def get_compression_ratio(self):
-        principal_shape = self.get_principal_shape()
-        bottleneck_shape = self.get_bottleneck_shape()
-        if bottleneck_shape is None:
-            return None
-        return np.prod(bottleneck_shape) / np.prod(principal_shape)
-    
-    def get_principal_shape(self):
-        # Return the shape of the principal part of the model.
-        return [self.config.block_size, self.config.n_embd]
-
-    def get_bottleneck_shape(self):
-        # Raise an exception if there is no bottleneck.
-        if self.bottleneck is None:
-            return None
-        
-        # Return the shape.
-        return self.bottleneck.get_shape()
+        return BaseTransformer.load_generic(check_point_path, EncoderTransformerConfig, EncoderTransformer)

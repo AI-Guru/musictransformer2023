@@ -4,6 +4,7 @@ import datetime
 import sys
 sys.path.append(".")
 from source.trainer import TrainerConfig, Trainer
+from source.transformer import TransformerConfig, Transformer
 from source.encodertransformer import EncoderTransformerConfig, EncoderTransformer
 from source.bottlenecks import (
     VariationalCNNBottleneck,
@@ -16,11 +17,17 @@ def train():
 
     test = "test" in sys.argv
 
+    config_class = TransformerConfig
+    model_class = Transformer
+
+    #config_class = EncoderTransformerConfig
+    #model_class = EncoderTransformer
+
     # Get the timestamp as YYYYMMDD-HHMM.
     timestamp = datetime.datetime.now().strftime("%Y%m%d-%H%M")
 
     # Create the model config.
-    model_config = EncoderTransformerConfig(
+    model_config = config_class(
         vocab_size = 320,
         n_layer = 4,
         n_head = 8,
@@ -49,7 +56,7 @@ def train():
     )
 
     # Create the model.
-    model = EncoderTransformer(model_config)
+    model = model_class(model_config)
     print(model.summary())
     if "summary" in sys.argv:
         return
