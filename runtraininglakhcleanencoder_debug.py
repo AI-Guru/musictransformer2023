@@ -22,8 +22,8 @@ def train():
     # Create the model config.
     model_config = EncoderTransformerConfig(
         vocab_size = 320,
-        n_layer = 4,
-        n_head = 8,
+        n_layer = 2,
+        n_head = 4,
         n_embd = 128,
         dropout = 0.0,
         bias = False,
@@ -31,16 +31,19 @@ def train():
 
         weight_sharing = True,
         
-        bottleneck = "VariationalCNNBottleneck",
-        bottleneck_channels_list=[128, 256],
+        # Uses a CNN to extract features from the 2D samples.
+        bottleneck = "CNNBottleneck",
+        #bottleneck = "VariationalCNNBottleneck",
+        #bottleneck_channels_list=[128, 256],
         
-        #bottleneck = "variational_linear_1d", # "simple" or "variational" or "none" or "variational_linear_1d"
-        #bottleneck_channels_list=[2084, 512],
-    
+        # Keeps the 2D samples.
+        #bottleneck = "Linear2DBottleneck",
         #bottleneck = "VariationalLinear2DBottleneck",
         #bottleneck_channels_list=[64, 16, 2],
 
+        # Reshapes the 2D samples into 1D samples.
         #bottleneck = "Linear1DBottleneck",
+        #bottleneck = "VariationalLinear1DBottleneck",
         #bottleneck_channels_list=[1024, 128],
 
         #bottleneck = "VariationalLinear1DBottleneck",
@@ -69,18 +72,19 @@ def train():
     trainer_config = TrainerConfig(
 
         # General settings.
-        out_dir=f"output/lakhclean/encodertransformer_{timestamp}",
+        out_dir=f"output_debug/lakhclean/encodertransformer_{timestamp}",
         batch_size=128,
         num_epochs=5,
         device="auto",
         
         # Bottleneck config.
-        bottleneck_loss_coefficient=1.0,
-        bottleneck_loss_coefficient_max=1.0,
+        bottleneck_loss_coefficient=0.1,
+        bottleneck_loss_coefficient_max=0.1,
         bottleneck_loss_iterations=15_000,
         
         # Optimizer settings.
-        learning_rate=6e-4, # Max learning rate.
+        learning_rate=6e-5, # Max learning rate.
+        min_lr=6e-6,            # Minimum learning rate, should be ~= learning_rate/10 per Chinchilla.
         max_iters=50_000,   # Total number of training iterations.
         weight_decay=1e-1,  # Weight decay.
         beta1=0.9,          # Beta1 for Adam.
@@ -91,7 +95,6 @@ def train():
         decay_lr=True,          # Whether to decay the learning rate.
         warmup_iters=1_000,     # How many steps to warm up for.
         lr_decay_iters=50_000,  # Should be ~= max_iters per Chinchilla.
-        min_lr=6e-5,            # Minimum learning rate, should be ~= learning_rate/10 per Chinchilla.
 
         # Wandb config.
         wandb_log=True,
@@ -99,19 +102,21 @@ def train():
         wandb_run_name=f"encodertransformer_{timestamp}",
         
         # When to evaluate.
-        eval_every=2000,
+        eval_every=500,
         eval_mode="steps",
 
         # When to log.
-        log_every=2000,
+        log_every=500,
         log_mode="steps",
 
         # When to save.
-        save_every=2000,
+        save_every=5_000_000_000, # Do not save.
         save_mode= "steps",
 
         # Debugging.
         find_not_updated_layers=True,
+        max_eval_steps=500,
+        log_grad_norm=True,
     )
 
     # Create the trainer.

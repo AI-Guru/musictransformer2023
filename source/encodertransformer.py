@@ -30,6 +30,7 @@ class EncoderTransformerConfig:
     n_embd: int = 128 #768
     dropout: float = 0.0
     bias: bool = True # True: bias in Linears and LayerNorms, like GPT-2. False: a bit better and faster
+    weight_sharing: bool = True # share weights between token and positional embeddings like GPT-2
     bottleneck: str = "none"
     bottleneck_channels_list: List[int] = field(default_factory=lambda: [192, 256, 320])
     flash_attention: bool = False
@@ -86,7 +87,8 @@ class EncoderTransformer(nn.Module):
         # This behavior is deprecated and will be an error in future versions"
         # not 100% sure what this is, so far seems to be harmless. TODO investigate
         # https://paperswithcode.com/method/weight-tying
-        self.wte.weight = self.lm_head.weight 
+        if config.weight_sharing:
+            self.wte.weight = self.lm_head.weight 
 
         # init all weights
         self.apply(self._init_weights)
@@ -144,7 +146,7 @@ class EncoderTransformer(nn.Module):
                 return_loss=True,
                 padding_mask=padding_mask,
             ) 
-            assert isinstance(bottleneck_loss, torch.Tensor), f"bottleneck_loss is {type(bottleneck_loss)}"
+            assert isinstance(bottleneck_loss, torch.Tensor) or bottleneck_loss is None, f"bottleneck_loss is {type(bottleneck_loss)}"
 
         # Add the position embeddings.
         x_encoder = x_encoder + pos_emb_encoder

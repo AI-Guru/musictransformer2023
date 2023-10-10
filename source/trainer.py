@@ -79,6 +79,11 @@ class TrainerConfig:
     # DDP settings
     backend: str = "nccl"  # 'nccl', 'gloo', etc.
 
+    # Debugging.
+    find_not_updated_layers:bool = False
+    max_eval_steps: int = 0  # If > 0, only evaluate this many steps.
+    log_grad_norm: bool = False
+
     # system
     device: str = "auto"  # Examples: 'cpu', 'cuda', 'cuda:0', 'cuda:1' etc., or try 'mps' on macbooks.
     dtype: str = "bfloat16" if ("torch" in locals() or "torch" in globals()) and torch.cuda.is_available() and torch.cuda.is_bf16_supported() else "float16"  # 'float32', 'bfloat16', or 'float16', the latter will auto implement a GradScaler.
@@ -143,6 +148,11 @@ class TrainerConfig:
         assert isinstance(self.device, str), "device must be a string"
         assert self.dtype in ["float32", "bfloat16", "float16"], "dtype must be 'float32', 'bfloat16', or 'float16'"
         assert isinstance(self.compile, bool), "compile must be a boolean"
+
+        # Debugging.
+        assert isinstance(self.find_not_updated_layers, bool), "find_not_updated_layers must be a boolean"
+        assert isinstance(self.max_eval_steps, int) and self.max_eval_steps >= 0, "max_eval_steps must be a non-negative integer"
+        assert isinstance(self.log_grad_norm, bool), "log_grad_norm must be a boolean"
 
 
 class Trainer:
@@ -223,7 +233,6 @@ class Trainer:
         ptdtype = {'float32': torch.float32, 'bfloat16': torch.bfloat16, 'float16': torch.float16}[self.config.dtype]
         ctx = nullcontext() if self.device_type == 'cpu' else torch.amp.autocast(device_type=self.device_type, dtype=ptdtype)
 
-
         # Initialize a GradScaler. If enabled=False scaler is a no-op
         print("Initializing GradScaler...")
         scaler = torch.cuda.amp.GradScaler(enabled=(self.config.dtype == 'float16'))
@@ -291,21 +300,32 @@ class Trainer:
                     losses_dict[f"{split}/{loss_type}"] = []
             return losses_dict
         
+        def create_kpi_dict():
+            kpi_dict = {}
+            if self.config.log_grad_norm:
+                for kpi_type in ["grad_norm/total"]:
+                    kpi_dict[kpi_type] = []
+                for name, param in model.named_parameters():
+                    if param.requires_grad:
+                        kpi_dict[f"grad_norm/{name}"] = []
+            return kpi_dict
+        
         # Go through the epochs.
         print("Starting training...")
         total_training_steps = 0
         training_start_time = time.time()
         model.train()
         epoch_data_iterator = None
-        current_epoch = 0
+        current_epoch = 1
         stop_training = False
         losses_dict = create_losses_dict()
         best_losses = { key: float ("inf") for key in losses_dict.keys() }
+        kpi_dict = create_kpi_dict()
         while True:
 
             # Start the next epoch.
             if epoch_data_iterator is None:
-                print(f"Starting epoch {current_epoch}...")
+                print(f"Starting epoch {current_epoch}/{self.config.num_epochs}...")
                 epoch_start_time = time.time()
                 epoch_training_steps = 0
                 epoch_data_iterator = dataset.iterate(split="train", shuffle=True, batch_size=self.config.batch_size)
@@ -318,7 +338,7 @@ class Trainer:
             # End of epoch.
             except StopIteration:
                 epoch_elapsed_time = time.time() - epoch_start_time
-                print(f"Epoch {current_epoch} elapsed time: {datetime.timedelta(seconds=epoch_elapsed_time)}")
+                print(f"Epoch {current_epoch}/{self.config.num_epochs} elapsed time: {datetime.timedelta(seconds=epoch_elapsed_time)}")
 
                 epoch_data_iterator = None
                 current_epoch += 1
@@ -351,7 +371,7 @@ class Trainer:
                 bottleneck_loss_coefficient = get_bottleneck_loss_coefficient(total_training_steps)
 
                 # Print.
-                print(f"Epoch={current_epoch:,} step={total_training_steps:,} lr={lr:.4f} blc={bottleneck_loss_coefficient:.4f}", end="\r")
+                print(f"Epoch={current_epoch:,}/{self.config.num_epochs} step={total_training_steps:,} lr={lr:.4f} blc={bottleneck_loss_coefficient:.4f}", end="\r")
 
                 # Forward pass and get the loss.
                 if model.family == "encoderdecoder":
@@ -391,7 +411,42 @@ class Trainer:
                 # Step the optimizer and scaler if training in fp16.
                 scaler.step(optimizer)
                 scaler.update()
-                
+
+                # Find all the layers of the model that were not updated.
+                if self.config.find_not_updated_layers:
+                    not_updated_layers = []
+                    for name, param in model.named_parameters():
+                        if param.requires_grad:
+                            if param.grad is None:
+                                print(f"Warning: {name} has no gradient.")
+                                not_updated_layers.append(name)
+                            elif torch.all(param.grad == 0.0):
+                                print(f"Warning: {name} has a gradient of all zeros.")
+                                not_updated_layers.append(name)
+                            elif torch.any(torch.isnan(param.grad)):
+                                print(f"Warning: {name} has a gradient of all NaNs.")
+                                not_updated_layers.append(name)
+                    if len(not_updated_layers) > 0:
+                        exit(0)
+
+                # Log the gradient norm.
+                if self.config.log_grad_norm:
+                    for name, param in model.named_parameters():
+                        if param.requires_grad:
+                            key = f"grad_norm/{name}"
+                            if param.grad is not None:
+                                norm = torch.linalg.norm(param.grad).item()
+                                kpi_dict["grad_norm/total"].append(norm)
+                                kpi_dict[key].append(norm)
+                            else:
+                                kpi_dict["grad_norm/total"].append(0.0)
+                                kpi_dict[key].append(0.0)
+
+                # Print all the named parameters.
+                #for name, param in model.named_parameters():
+                #    print(f"{name}: {param.requires_grad} updated: {param.grad is not None}")
+                #exit(0)            
+
                 # Flush the gradients as soon as we can, no need for this memory anymore.
                 optimizer.zero_grad(set_to_none=True)
 
@@ -426,6 +481,10 @@ class Trainer:
                     print(f"Validation step {validation_steps:,}", end="\r")
                     validation_steps += 1
                     
+                    # Stop evaluation here.
+                    if self.config.max_eval_steps > 0 and validation_steps >= self.config.max_eval_steps:
+                        break
+                    
                     # Padding mask.
                     if not self.config.use_padding_mask:
                         padding_masks_validate = None
@@ -459,14 +518,6 @@ class Trainer:
                 print("")
                 torch.cuda.empty_cache()
                 model.train()
-
-                # Evaluation is done. Delete the variables to free up memory.
-                #del encoder_ids_validate
-                #del decoder_ids_validate
-                #del target_ids_validate
-                #del loss
-                #del reconstruction_loss
-                #del bottleneck_loss
 
                 # Save the best model.
                 if self.config.save_best:
@@ -508,9 +559,19 @@ class Trainer:
                 log_dict["bottleneck_loss_coefficient"] = bottleneck_loss_coefficient
                 #log_dict["mfu"] = mfu
 
+                for key, values in kpi_dict.items():
+                    if key.startswith("grad_norm"):
+                        log_dict[f"{key}_mean"] = np.mean(values)
+                        log_dict[f"{key}_std"] = np.std(values)
+                        log_dict[f"{key}_max"] = np.max(values)
+                        log_dict[f"{key}_min"] = np.min(values)
+                    else:
+                        raise Exception(f"Unknown key: {key}")
+                kpi_dict = create_kpi_dict()
+
                 # Log to terminal.
-                print(f"Log at epoch {current_epoch} step {total_training_steps}...")
-                print(" ".join([f"{k}: {v:.4f}" for k, v in log_dict.items()]))
+                print(f"Log at epoch {current_epoch}/{self.config.num_epochs} step {total_training_steps}...")
+                #print(" ".join([f"{k}: {v:.4f}" for k, v in log_dict.items()]))
                 
                 # Log to wandb.
                 if self.config.wandb_log:

@@ -325,6 +325,58 @@ class Linear2DBottleneck(BaseBottleneck):
         super(Linear2DBottleneck, self).__init__(config, encoder, decoder, mu, logvar)
 
 
+class CNNBottleneck(BaseBottleneck):
+
+    # A layer that converts the samples to 1D, applies a linear layer, and converts back to 2D.
+
+    def __init__(self, config):
+
+        # Get the channel list.
+        channels_list = [config.n_embd] + config.bottleneck_channels_list
+
+        # Encoder layers
+        encoder_layers = []
+        encoder_layers += [TransposeLayer(1, 2)]
+        for channels_index in range(len(channels_list) - 1):
+            in_channels = channels_list[channels_index]
+            out_channels = channels_list[channels_index + 1]
+            encoder_layers.extend([
+                nn.Conv1d(in_channels, out_channels, kernel_size=5, stride=2, padding=2),
+                nn.ReLU()
+            ])
+        encoder = nn.Sequential(*encoder_layers)
+
+        # Masking layer. This is used to mask out the latent space.
+        masking_layers = []
+        for i in range(len(channels_list) - 1):
+            in_channels = 1
+            out_channels = 1
+            conv_layer = nn.Conv1d(in_channels, out_channels, kernel_size=5, stride=2, padding=2, padding_mode="replicate", bias=False)
+            conv_layer.weight.data = torch.ones_like(conv_layer.weight.data) / 5
+            conv_layer.weight.requires_grad = False
+            masking_layers.append(conv_layer)
+        masking_layers = nn.Sequential(*masking_layers)
+
+        # Produce mean and log variance for the latent space
+        mu = None
+        logvar = None
+
+        # Decoder layers
+        decoder_layers = []
+        for i in range(len(channels_list), 1, -1):
+            in_channels = channels_list[i - 1]
+            out_channels = channels_list[i - 2]
+            decoder_layers.extend([
+                nn.ConvTranspose1d(in_channels, out_channels, kernel_size=5, stride=2, padding=2, output_padding=1),
+                nn.ReLU()
+            ])
+        decoder_layers += [TransposeLayer(1, 2)]
+        decoder = nn.Sequential(*decoder_layers)
+
+        # Call the super constructor.
+        super(CNNBottleneck, self).__init__(config, encoder, decoder, mu, logvar, masking_layers)
+
+
 class VariationalCNNBottleneck(BaseBottleneck):
 
     # A layer that converts the samples to 1D, applies a linear layer, and converts back to 2D.
