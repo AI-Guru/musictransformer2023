@@ -1,15 +1,9 @@
-import os
-import time
 import datetime
 import sys
 sys.path.append(".")
 from source.trainer import TrainerConfig, Trainer
 from source.transformer import TransformerConfig, Transformer
 from source.encodertransformer import EncoderTransformerConfig, EncoderTransformer
-from source.bottlenecks import (
-    VariationalCNNBottleneck,
-    VariationalLinear2DBottleneck
-)
 from source.dataset import DatasetConfig, Dataset
 
 
@@ -17,11 +11,11 @@ def train():
 
     test = "test" in sys.argv
 
-    config_class = TransformerConfig
-    model_class = Transformer
+    #config_class = TransformerConfig
+    #model_class = Transformer
 
-    #config_class = EncoderTransformerConfig
-    #model_class = EncoderTransformer
+    config_class = EncoderTransformerConfig
+    model_class = EncoderTransformer
 
     # Get the timestamp as YYYYMMDD-HHMM.
     timestamp = datetime.datetime.now().strftime("%Y%m%d-%H%M")
@@ -38,6 +32,7 @@ def train():
 
         weight_sharing = True,
         
+        #bottleneck = "CNNBottleneck",
         bottleneck = "VariationalCNNBottleneck",
         bottleneck_channels_list=[128, 256],
         
@@ -82,23 +77,23 @@ def train():
         device="auto",
         
         # Bottleneck config.
-        bottleneck_loss_coefficient=1.0,
-        bottleneck_loss_coefficient_max=1.0,
-        bottleneck_loss_iterations=15_000,
+        bottleneck_loss_coefficient=0.0,
+        bottleneck_loss_coefficient_max=0.1,
+        bottleneck_loss_iterations=25_000,
         
         # Optimizer settings.
-        learning_rate=6e-4, # Max learning rate.
-        max_iters=50_000,   # Total number of training iterations.
+        #max_iters=50_000,   # Total number of training iterations.
         weight_decay=1e-1,  # Weight decay.
         beta1=0.9,          # Beta1 for Adam.
         beta2=0.95,         # Beta2 for Adam.
         grad_clip=1.0,      # Clip gradients at this value, or disable if == 0.0.
 
         # Learning rate decay settings.
+        learning_rate=1e-4,     # Max learning rate.
+        min_lr=1e-5,            # Minimum learning rate, should be ~= learning_rate/10 per Chinchilla.
         decay_lr=True,          # Whether to decay the learning rate.
         warmup_iters=1_000,     # How many steps to warm up for.
         lr_decay_iters=50_000,  # Should be ~= max_iters per Chinchilla.
-        min_lr=6e-5,            # Minimum learning rate, should be ~= learning_rate/10 per Chinchilla.
 
         # Wandb config.
         wandb_log=True,
@@ -119,6 +114,9 @@ def train():
 
         # Debugging.
         find_not_updated_layers=True,
+        stop_on_vanishing_gradient=False,
+        log_grad_norm=True,
+    
     )
 
     # Create the trainer.

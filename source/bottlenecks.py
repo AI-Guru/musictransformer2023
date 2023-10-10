@@ -395,6 +395,7 @@ class VariationalCNNBottleneck(BaseBottleneck):
             encoder_layers.extend([
                 nn.Conv1d(in_channels, out_channels, kernel_size=5, stride=2, padding=2),
                 nn.ReLU()
+                #nn.LeakyReLU(negative_slope=0.2, inplace=True)
             ])
         encoder = nn.Sequential(*encoder_layers)
 
@@ -423,9 +424,30 @@ class VariationalCNNBottleneck(BaseBottleneck):
             decoder_layers.extend([
                 nn.ConvTranspose1d(in_channels, out_channels, kernel_size=5, stride=2, padding=2, output_padding=1),
                 nn.ReLU()
+                #nn.LeakyReLU(negative_slope=0.2, inplace=True)
             ])
+        # Remove the last ReLU. TODO: Is this good?
+        #decoder_layers = decoder_layers[:-1]
         decoder_layers += [TransposeLayer(1, 2)]
         decoder = nn.Sequential(*decoder_layers)
 
         # Call the super constructor.
         super(VariationalCNNBottleneck, self).__init__(config, encoder, decoder, mu, logvar, masking_layers)
+
+        #self.apply(self._init_weights)
+
+    def _init_weights(self, module):
+        assert False
+
+        # Use kaiming_normal_ for all conv layers.
+        if isinstance(module, nn.Conv1d):
+            nn.init.kaiming_normal_(module.weight, mode='fan_out', nonlinearity='relu')
+            if module.bias is not None:
+                nn.init.zeros_(module.bias)
+        elif isinstance(module, nn.ConvTranspose1d):
+            nn.init.kaiming_normal_(module.weight, mode='fan_out', nonlinearity='relu')
+            if module.bias is not None:
+                nn.init.zeros_(module.bias)
+        else:
+            pass
+

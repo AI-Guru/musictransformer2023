@@ -23,7 +23,18 @@ class BaseTransformerConfig:
 
 class BaseTransformer(nn.Module):
 
+    def get_modules(self):
+        modules = {}
+        if self.encoder is not None:
+            modules["encoder"] = self.encoder
+        if self.bottleneck is not None:
+            modules["bottleneck"] = self.bottleneck
+        if self.decoder is not None:
+            modules["decoder"] = self.decoder
+        return modules
+
     def summary(self):
+
         summary = ""
         summary += f"Block size:        {self.get_block_size()}\n" 
         summary += f"Vocab size:        {self.get_vocab_size()}\n"  

@@ -81,6 +81,7 @@ class TrainerConfig:
 
     # Debugging.
     find_not_updated_layers:bool = False
+    stop_on_vanishing_gradient: bool = False
     max_eval_steps: int = 0  # If > 0, only evaluate this many steps.
     log_grad_norm: bool = False
 
@@ -303,11 +304,11 @@ class Trainer:
         def create_kpi_dict():
             kpi_dict = {}
             if self.config.log_grad_norm:
-                for kpi_type in ["grad_norm/total"]:
+                kpi_types = ["grad_norm/total"]
+                for module_name, _ in model.get_modules().items():
+                    kpi_types.append(f"grad_norm/{module_name}")
+                for kpi_type in kpi_types:
                     kpi_dict[kpi_type] = []
-                for name, param in model.named_parameters():
-                    if param.requires_grad:
-                        kpi_dict[f"grad_norm/{name}"] = []
             return kpi_dict
         
         # Go through the epochs.
@@ -321,6 +322,7 @@ class Trainer:
         losses_dict = create_losses_dict()
         best_losses = { key: float ("inf") for key in losses_dict.keys() }
         kpi_dict = create_kpi_dict()
+        vanished_gradient = False
         while True:
 
             # Start the next epoch.
@@ -371,7 +373,7 @@ class Trainer:
                 bottleneck_loss_coefficient = get_bottleneck_loss_coefficient(total_training_steps)
 
                 # Print.
-                print(f"Epoch={current_epoch:,}/{self.config.num_epochs} step={total_training_steps:,} lr={lr:.6f} blc={bottleneck_loss_coefficient:.6f}", end="\r")
+                print(f"Epoch={current_epoch:,}/{self.config.num_epochs} step={total_training_steps:,} lr={lr:.6f} blc={bottleneck_loss_coefficient:.6f} vanished: {vanished_gradient}", end="\r")
 
                 # Forward pass and get the loss.
                 if model.family == "encoderdecoder":
@@ -413,39 +415,36 @@ class Trainer:
                 scaler.update()
 
                 # Find all the layers of the model that were not updated.
-                if self.config.find_not_updated_layers:
-                    not_updated_layers = []
+                # Output will happen only once.
+                if (self.config.find_not_updated_layers or self.config.stop_on_vanishing_gradient) and not vanished_gradient:
                     for name, param in model.named_parameters():
                         if param.requires_grad:
                             if param.grad is None:
                                 print(f"Warning: {name} has no gradient.")
-                                not_updated_layers.append(name)
+                                vanished_gradient = True
                             elif torch.all(param.grad == 0.0):
                                 print(f"Warning: {name} has a gradient of all zeros.")
-                                not_updated_layers.append(name)
+                                vanished_gradient = True
                             elif torch.any(torch.isnan(param.grad)):
                                 print(f"Warning: {name} has a gradient of all NaNs.")
-                                not_updated_layers.append(name)
-                    if len(not_updated_layers) > 0:
+                                vanished_gradient = True
+                    if vanished_gradient and self.config.stop_on_vanishing_gradient:
+                        print("Stopping script because of vanished gradient.")
                         exit(0)
 
-                # Log the gradient norm.
+                # Log the gradient norm. Do this per module.
                 if self.config.log_grad_norm:
-                    for name, param in model.named_parameters():
-                        if param.requires_grad:
-                            key = f"grad_norm/{name}"
-                            if param.grad is not None:
-                                norm = torch.linalg.norm(param.grad).item()
-                                kpi_dict["grad_norm/total"].append(norm)
-                                kpi_dict[key].append(norm)
-                            else:
-                                kpi_dict["grad_norm/total"].append(0.0)
-                                kpi_dict[key].append(0.0)
-
-                # Print all the named parameters.
-                #for name, param in model.named_parameters():
-                #    print(f"{name}: {param.requires_grad} updated: {param.grad is not None}")
-                #exit(0)            
+                    for module_name, module in model.get_modules().items():
+                        for _, parameter in module.named_parameters():
+                            if parameter.requires_grad:
+                                key = f"grad_norm/{module_name}"
+                                if parameter.grad is not None:
+                                    norm = torch.linalg.norm(parameter.grad).item()
+                                    kpi_dict["grad_norm/total"].append(norm)
+                                    kpi_dict[key].append(norm)
+                                else:
+                                    kpi_dict["grad_norm/total"].append(0.0)
+                                    kpi_dict[key].append(0.0)
 
                 # Flush the gradients as soon as we can, no need for this memory anymore.
                 optimizer.zero_grad(set_to_none=True)
@@ -562,9 +561,6 @@ class Trainer:
                 for key, values in kpi_dict.items():
                     if key.startswith("grad_norm"):
                         log_dict[f"{key}_mean"] = np.mean(values)
-                        log_dict[f"{key}_std"] = np.std(values)
-                        log_dict[f"{key}_max"] = np.max(values)
-                        log_dict[f"{key}_min"] = np.min(values)
                     else:
                         raise Exception(f"Unknown key: {key}")
                 kpi_dict = create_kpi_dict()
