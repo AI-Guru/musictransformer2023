@@ -110,7 +110,7 @@ def train():
         log_mode="steps",
 
         # When to save.
-        save_every=5_000_000_000, # Do not save.
+        save_every=500,
         save_mode= "steps",
 
         # Debugging.

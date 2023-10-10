@@ -371,7 +371,7 @@ class Trainer:
                 bottleneck_loss_coefficient = get_bottleneck_loss_coefficient(total_training_steps)
 
                 # Print.
-                print(f"Epoch={current_epoch:,}/{self.config.num_epochs} step={total_training_steps:,} lr={lr:.4f} blc={bottleneck_loss_coefficient:.4f}", end="\r")
+                print(f"Epoch={current_epoch:,}/{self.config.num_epochs} step={total_training_steps:,} lr={lr:.6f} blc={bottleneck_loss_coefficient:.6f}", end="\r")
 
                 # Forward pass and get the loss.
                 if model.family == "encoderdecoder":

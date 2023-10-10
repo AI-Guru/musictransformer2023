@@ -61,5 +61,8 @@ class Tokenizer:
         return sequence
     
     def decode_token(self, id):
-        token = self.vocabulary[id]
+        if id not in range(self.vocabulary_size):
+            token = self.vocabulary[self.encode_token("[UNK]")]
+        else:
+            token = self.vocabulary[id]
         return token

@@ -211,8 +211,8 @@ class EncoderTransformer(nn.Module):
         pos = torch.arange(0, t, dtype=torch.long, device=device) # shape (t)
 
         # Forward the encoder.
-        tok_emb_encoder = self.encoder.wte(encoder_ids)
-        pos_emb_encoder = self.encoder.wpe(pos)
+        tok_emb_encoder = self.wte(encoder_ids)
+        pos_emb_encoder = self.wpe(pos)
         x_encoder = self.encoder.drop(tok_emb_encoder + pos_emb_encoder)
 
         for encoder_block in self.encoder.h:
@@ -221,7 +221,18 @@ class EncoderTransformer(nn.Module):
         x_encoder = self.encoder.ln_f(x_encoder)
 
         return x_encoder
+    
+    def decode(self, z):
 
+        # Forward the decoder.
+        x_decoder = self.decoder.drop(z)
+        for decoder_block in self.decoder.h:
+            x_decoder = decoder_block(x_decoder)
+        x_decoder = self.decoder.ln_f(x_decoder)
+
+        # Get the logits.
+        logits = self.lm_head(x_decoder)
+        return logits
 
     def crop_block_size(self, block_size):
         # model surgery to decrease the block size if necessary
@@ -335,20 +346,12 @@ class EncoderTransformer(nn.Module):
 
 
     @torch.no_grad()
-    def generate(self, decoder_ids, encoder_ids=None, bottleneck_condition=None, max_new_tokens=128, end_token_id=None, temperature=1.0, top_k=None):
+    def generate(self, encoder_ids=None, bottleneck_condition=None, temperature=1.0):
         """
         Take a conditioning sequence of indices idx (LongTensor of shape (b,t)) and complete
         the sequence max_new_tokens times, feeding the predictions back into the model each time.
         Most likely you'll want to make sure to be in model.eval() mode of operation for this.
         """
-
-        # Ensure that idx is a tensor.
-        if not isinstance(decoder_ids, torch.LongTensor):
-            decoder_ids = torch.LongTensor(decoder_ids)
-
-        # Ensure that the first dimension is batch size.
-        if decoder_ids.dim() == 1:
-            decoder_ids = decoder_ids.unsqueeze(0)
 
         # Encoder ids and bottleneck condition cannot both be specified.
         if encoder_ids is not None and bottleneck_condition is not None:
@@ -362,6 +365,7 @@ class EncoderTransformer(nn.Module):
         elif bottleneck_condition is not None:
             assert self.bottleneck is not None, "Cannot generate without a bottleneck."
             encoder_x = self.bottleneck.decode(bottleneck_condition)
+            print(f"encoder_x.shape: {encoder_x.shape}")
 
         # Use the encoder ids if they exist.
         elif encoder_ids is not None:
@@ -369,43 +373,53 @@ class EncoderTransformer(nn.Module):
             if not isinstance(encoder_ids, torch.LongTensor):
                 encoder_ids = torch.LongTensor(encoder_ids)
 
+            print(f"encoder_ids.shape: {encoder_ids.shape}")
+
             # Make sure that the first dimension is batch size.
             if encoder_ids.dim() == 1:
                 encoder_ids = encoder_ids.unsqueeze(0)
 
             # Forward the encoder.
             encoder_x = self.encode(encoder_ids)
+            print(f"encoder_x.shape: {encoder_x.shape}")
 
-        # Generate tokens.
-        for _ in range(max_new_tokens):
+            # If the bottleneck exists, use it.
+            if self.bottleneck is not None:
+                encoder_x = self.bottleneck(encoder_x)
+                print(f"encoder_x.shape after bottleneck: {encoder_x.shape}")
 
-            # if the sequence context is growing too long we must crop it at block_size
-            idx_cond = decoder_ids if decoder_ids.size(1) <= self.config.block_size else decoder_ids[:, -self.config.block_size:]
+        # Now decode. 
+        logits = self.decode(encoder_x)
+        assert len(logits.shape) == 3, f"len(logits.shape) is {len(logits.shape)}"
+        print(f"logits.shape: {logits.shape}")
 
-            # forward the model to get the logits for the index in the sequence
-            #logits, _ = self(idx_cond)
-            logits = self.forward_encoder(encoder_x, idx_cond)
+        # Apply the temperature.
+        if temperature != 0.0:
+            logits = logits / temperature
 
-            # pluck the logits at the final step and scale by desired temperature
-            logits = logits[:, -1, :] / temperature
-            # optionally crop the logits to only the top k options
-            if top_k is not None:
-                v, _ = torch.topk(logits, min(top_k, logits.size(-1)))
-                logits[logits < v[:, [-1]]] = -float('Inf')
-            # apply softmax to convert logits to (normalized) probabilities
-            probs = F.softmax(logits, dim=-1)
-            
-            # sample from the distribution
-            idx_next = torch.multinomial(probs, num_samples=1)
+        # Get the probabilities.
+        probs = F.softmax(logits, dim=-1)
+        assert len(probs.shape) == 3, f"len(probs.shape) is {len(probs.shape)}"
+        print(f"probs.shape: {probs.shape}")
 
-            # append sampled index to the running sequence and continue
-            decoder_ids = torch.cat((decoder_ids, idx_next), dim=1)
+        # Sample from the distribution.
+        # Keep in mind that the first dimension is batch size and the second dimension is sequence length.
+        # Sample from the last dimension.
+        # Return shape is (batch_size, sequence_length, 1).
+        indices = []
+        for batch_index in range(probs.shape[0]):
+            batch_indices = []
+            for sequence_index in range(probs.shape[1]):
+                sample = torch.multinomial(probs[batch_index, sequence_index, :], num_samples=1)[0]
+                batch_indices.append(sample)
+            batch_indices = torch.stack(batch_indices, dim=0)
+            indices.append(batch_indices)
+        indices = torch.stack(indices, dim=0)
+        print(f"indices.shape: {indices.shape}")
+        assert len(indices.shape) == 2, f"len(idx_next.shape) is {len(indices.shape)} shape is {indices.shape}"
 
-            # If the latest token emitted is an <END> token, then we're done.
-            if end_token_id is not None and idx_next.squeeze().item() == end_token_id:
-                break
-
-        return decoder_ids
+        # Return the indices.
+        return indices
 
 
     #@classmethod
