@@ -1,11 +1,9 @@
-import os
-import time
 import datetime
 import sys
 sys.path.append(".")
 from source.trainer import TrainerConfig, Trainer
 from source.transformer import TransformerConfig, Transformer
-from source.tokenizer import Tokenizer
+from source.encodertransformer import EncoderTransformerConfig, EncoderTransformer
 from source.dataset import DatasetConfig, Dataset
 
 
@@ -13,18 +11,54 @@ def train():
 
     test = "test" in sys.argv
 
+    #config_class = TransformerConfig
+    #model_class = Transformer
+
+    config_class = EncoderTransformerConfig
+    model_class = EncoderTransformer
+
     # Get the timestamp as YYYYMMDD-HHMM.
     timestamp = datetime.datetime.now().strftime("%Y%m%d-%H%M")
 
-    # Create the training config.
-    trainer_config = TrainerConfig(
-        out_dir=f"output/jsfakes4bars/transformer_{timestamp}",
-        device="auto"
+    # Create the model config.
+    model_config = config_class(
+        vocab_size = 320,
+        n_layer = 4,
+        n_head = 8,
+        n_embd = 128,
+        dropout = 0.0,
+        bias = False,
+        block_size = 512,
+
+        weight_sharing = True,
+        
+        #bottleneck = "CNNBottleneck",
+        bottleneck = "VariationalCNNBottleneck",
+        bottleneck_channels_list=[128, 256],
+        
+        #bottleneck = "variational_linear_1d", # "simple" or "variational" or "none" or "variational_linear_1d"
+        #bottleneck_channels_list=[2084, 512],
+    
+        #bottleneck = "VariationalLinear2DBottleneck",
+        #bottleneck_channels_list=[64, 16, 2],
+
+        #bottleneck = "Linear1DBottleneck",
+        #bottleneck_channels_list=[1024, 128],
+
+        #bottleneck = "VariationalLinear1DBottleneck",
+        #bottleneck_channels_list=[1024, 128],
+
     )
+
+    # Create the model.
+    model = model_class(model_config)
+    print(model.summary())
+    if "summary" in sys.argv:
+        return
 
     # Create the dataset config and dataset.
     dataset_config = DatasetConfig(
-        dataset_path = "data/jsfakes4bars/generation",
+        dataset_path = "data/lakhclean_mmmtrack_1bars_vae/generation",
         token_dropout = False # No data augmentation.
 
     )
@@ -33,36 +67,65 @@ def train():
     )
     print(dataset)
 
-    # Create the model config.
-    model_config = TransformerConfig(
-        vocab_size = 128,
-        n_layer = 8,
-        n_head = 8,
-        n_embd = 512,
-        dropout = 0.0,
-        bias = False,
-        block_size = 384,
-        bottleneck = "variational", # "simple" or "variational" or "none"
-        bottleneck_depth = 5
+    # Create the Training config.
+    trainer_config = TrainerConfig(
+
+        # General settings.
+        out_dir=f"output/lakhclean/encodertransformer_{timestamp}",
+        batch_size=128,
+        num_epochs=5,
+        device="auto",
+        
+        # Bottleneck config.
+        bottleneck_loss_coefficient=0.0,
+        bottleneck_loss_coefficient_max=0.1,
+        bottleneck_loss_iterations=25_000,
+        
+        # Optimizer settings.
+        #max_iters=50_000,   # Total number of training iterations.
+        weight_decay=1e-1,  # Weight decay.
+        beta1=0.9,          # Beta1 for Adam.
+        beta2=0.95,         # Beta2 for Adam.
+        grad_clip=1.0,      # Clip gradients at this value, or disable if == 0.0.
+
+        # Learning rate decay settings.
+        learning_rate=1e-4,     # Max learning rate.
+        min_lr=1e-5,            # Minimum learning rate, should be ~= learning_rate/10 per Chinchilla.
+        decay_lr=True,          # Whether to decay the learning rate.
+        warmup_iters=1_000,     # How many steps to warm up for.
+        lr_decay_iters=50_000,  # Should be ~= max_iters per Chinchilla.
+
+        # Wandb config.
+        wandb_log=True,
+        wandb_project="encodertransformer-vae-lakhclean",
+        wandb_run_name=f"encodertransformer_{timestamp}",
+        
+        # When to evaluate.
+        eval_every=2000,
+        eval_mode="steps",
+
+        # When to log.
+        log_every=2000,
+        log_mode="steps",
+
+        # When to save.
+        save_every=2000,
+        save_mode= "steps",
+
+        # Debugging.
+        find_not_updated_layers=True,
+        stop_on_vanishing_gradient=False,
+        log_grad_norm=True,
+    
     )
-
-    # Set the output directory.
-    trainer_config.out_dir = os.path.join(trainer_config.out_dir, f"transformer_{model_config.bottleneck}_{timestamp}")
-
-    # Set the model config.
-    trainer_config.wandb_log = True if not test else False
-    trainer_config.wandb_project = "bottleneck-transformers-DEV"
-    trainer_config.wandb_run_name = f"transformer_{model_config.bottleneck}_{timestamp}"
-    trainer_config.wandb_group = "transformer"
-    bottleneck_loss_coefficient = 1.0 # The beta of the variational bottleneck loss. Start value.
-    bottleneck_loss_coefficient_max = 1.0 # End value.
-
-    # Create the model.
-    model = Transformer(model_config)
 
     # Create the trainer.
     trainer = Trainer(trainer_config)
+
+    # Train.
     trainer.train(model, dataset)
+
+
 
 if __name__ == "__main__":
     train()
