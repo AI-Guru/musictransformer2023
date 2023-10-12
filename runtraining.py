@@ -11,9 +11,11 @@ def train():
 
     test = "test" in sys.argv
 
+    # A vanilla Transformer.
     #config_class = TransformerConfig
     #model_class = Transformer
 
+    # A BERT-like model.
     config_class = EncoderTransformerConfig
     model_class = EncoderTransformer
 
@@ -22,29 +24,29 @@ def train():
 
     # Create the model config.
     model_config = config_class(
-        vocab_size = 320,
-        n_layer = 4,
-        n_head = 8,
-        n_embd = 128,
-        dropout = 0.0,
-        bias = False,
-        block_size = 512,
-
-        weight_sharing = True,
         
+        vocab_size = 320,   # Number of tokens in the vocabulary.
+        n_layer = 2,        # Number of transformer layers.
+        n_head = 4,         # Number of attention heads.     
+        n_embd = 128,       # Dimension of the embeddings.
+        dropout = 0.0,      # Dropout probability.
+        bias = False,       # Whether to use bias in the attention layers.
+        block_size = 512,   # Maximum sequence length.
+
+        weight_sharing = True, # Whether to share weights between the embeddings and the head.
+        
+        # Fully convolutional bottlenecks, either plain or variational.
         #bottleneck = "CNNBottleneck",
         bottleneck = "VariationalCNNBottleneck",
         bottleneck_channels_list=[128, 256],
-        
-        #bottleneck = "variational_linear_1d", # "simple" or "variational" or "none" or "variational_linear_1d"
-        #bottleneck_channels_list=[2084, 512],
-    
+
+        # Linear bottlenecks, either plain or variational. Transforms to 1D and then to back to 2D.
+        #bottleneck = "Linear2DBottleneck",
         #bottleneck = "VariationalLinear2DBottleneck",
         #bottleneck_channels_list=[64, 16, 2],
 
+        # Linear bottlenecks, either plain or variational. Applied on the embeddings.
         #bottleneck = "Linear1DBottleneck",
-        #bottleneck_channels_list=[1024, 128],
-
         #bottleneck = "VariationalLinear1DBottleneck",
         #bottleneck_channels_list=[1024, 128],
 
@@ -58,9 +60,9 @@ def train():
 
     # Create the dataset config and dataset.
     dataset_config = DatasetConfig(
-        dataset_path = "data/lakhclean_mmmtrack_1bars_vae/generation",
+        #dataset_path = "data/lakhclean_mmmtrack_1bars_vae/generation", # The dataset path.
+        dataset_path = "data/jsfakes4bars/generation", # The dataset path.
         token_dropout = False # No data augmentation.
-
     )
     dataset = Dataset(
         dataset_config,
@@ -73,7 +75,7 @@ def train():
         # General settings.
         out_dir=f"output/lakhclean/encodertransformer_{timestamp}",
         batch_size=128,
-        num_epochs=5,
+        num_epochs=500, # 5
         device="auto",
         
         # Bottleneck config.
@@ -116,7 +118,6 @@ def train():
         find_not_updated_layers=True,
         stop_on_vanishing_gradient=False,
         log_grad_norm=True,
-    
     )
 
     # Create the trainer.
@@ -126,6 +127,6 @@ def train():
     trainer.train(model, dataset)
 
 
-
+# Run the training.
 if __name__ == "__main__":
     train()

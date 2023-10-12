@@ -22,7 +22,7 @@ num_proc_load_dataset = num_proc
 def peprocess(
     dataset_id="TristanBehrens/js-fakes-4bars",
     output_path="data/jsfakes4bars",
-    padding_length=384,
+    padding_length=512,
     mode="generation" # "modeling"
     ):
 
